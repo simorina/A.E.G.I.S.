@@ -1,0 +1,84 @@
+/* --- CONFIGURAZIONE COLORI --- */
+:root {
+    --ops-bg: #0f1115;
+    --ops-panel: #1a1d24;
+    --ops-accent: #f59e0b; /* Amber 500 */
+    --ops-text: #e2e8f0;
+}
+
+body {
+    background-color: var(--ops-bg);
+}
+
+/* --- STILE MAPPA SATELLITARE --- */
+/* Rimuoviamo l'invert, mettiamo un leggero filtro per sembrare una ripresa digitale */
+.leaflet-layer {
+    filter: contrast(1.1) saturate(0.8) brightness(0.9);
+}
+
+/* --- SIDEBAR --- */
+.sidebar {
+    background: var(--ops-panel);
+    border-right: 1px solid #333;
+}
+
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: var(--ops-bg); }
+.sidebar::-webkit-scrollbar-thumb { background: #444; }
+
+/* --- CHAT BUBBLES --- */
+.msg-user {
+    background: #2d3748; /* Grigio bluastro militare */
+    color: white;
+    padding: 8px 12px;
+    margin-left: 2rem;
+    border-left: 3px solid var(--ops-accent);
+    font-size: 0.9rem;
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+
+.msg-ai {
+    background: transparent;
+    border: 1px solid #4a5568;
+    color: #cbd5e0;
+    padding: 10px;
+    margin-right: 2rem;
+    font-size: 0.9rem;
+}
+.msg-ai strong { color: var(--ops-accent); }
+
+/* --- SPINNER MILITARE (Quadrato Rotante) --- */
+.spinner-military {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--ops-accent);
+    border-top-color: transparent;
+    border-radius: 0; /* Quadrato per look più rigido */
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* --- INDICATORE STATUS --- */
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    background-color: #10b981; /* Verde "Online" */
+    border-radius: 50%;
+    box-shadow: 0 0 10px #10b981;
+    animation: pulse 2s infinite;
+}
+
+/* --- CUSTOM POPUP LEAFLET --- */
+.leaflet-popup-content-wrapper {
+    background: rgba(10, 10, 10, 0.9) !important;
+    border: 1px solid var(--ops-accent);
+    color: white !important;
+    border-radius: 0 !important;
+    font-family: 'Chakra Petch', sans-serif;
+}
+.leaflet-popup-tip {
+    background: var(--ops-accent);
+}

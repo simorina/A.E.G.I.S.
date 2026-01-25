@@ -1,0 +1,10 @@
+__pycache__/
+old_assets/
+requirements.txt
+.env
+.vscode/
+.DS_Store
+data/
+utility/
+file.ipynb
+
