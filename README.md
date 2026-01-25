@@ -1,6 +1,6 @@
 # A.E.G.I.S. // Geospatial Intelligence Agent
 
-![Status](https://img.shields.io/badge/STATUS-OPERATIONAL-brightgreen) ![Security](https://img.shields.io/badge/CLEARANCE-TOP%20SECRET-red) ![Tech](https://img.shields.io/badge/TECH-AI%20%7C%20POSTGIS-blue)
+![Status](https://img.shields.io/badge/STATUS-OPERATIONAL-brightgreen) ![Tech](https://img.shields.io/badge/TECH-AI%20%7C%20POSTGIS-blue)
 
 > **"Eyes in the sky, boots on the ground."**
 
