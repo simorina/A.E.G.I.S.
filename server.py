@@ -122,8 +122,11 @@ async def scan_endpoint(request: ScanRequest):
         if pil_img.mode == 'RGBA':
             pil_img = pil_img.convert('RGB')
         
+        #save in local the image for debug
+        # pil_img.save("debug_satellite_image.jpg", format="JPEG")
+        
         # Ridimensiona per non sovraccaricare l'LLM
-        pil_img.thumbnail((2048, 2048)) 
+        pil_img.thumbnail((1024, 1024)) 
         
         # 3. Conversione in Bytes (senza salvataggio su disco)
         buff = BytesIO()

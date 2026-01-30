@@ -1,55 +1,83 @@
-# A.E.G.I.S. // Geospatial Intelligence Agent
+# 🛡️ A.E.G.I.S. (Advanced Enhanced Geospatial Intelligence System)
 
-![Status](https://img.shields.io/badge/STATUS-OPERATIONAL-brightgreen) ![Tech](https://img.shields.io/badge/TECH-AI%20%7C%20POSTGIS-blue)
-
-> **"Eyes in the sky, boots on the ground."**
-
-**A.E.G.I.S.** (Autonomous Entity for Geospatial Intelligence & Surveillance) is an advanced GEOINT system powered by Artificial Intelligence. It bridges the gap between Large Language Models (LLMs), spatial databases (PostGIS), and computer vision to provide real-time tactical analysis of urban environments.
-
-The interface is engineered to simulate a military **Tactical Ops Center**, granting operators direct control over vector data querying and satellite optical reconnaissance.
+**A.E.G.I.S.** is a high-tech geospatial intelligence (GEOINT) platform designed to bridge the gap between human language and spatial databases. It allows military and civilian operators to query geographic data using natural language and perform real-time satellite imagery analysis via AI Vision models.
 
 ---
 
-## 🎯 Key Features
+## 🏗️ System Architecture
 
-### 1. 💬 Chat-to-SQL (Tactical Query)
-Query the geospatial database using natural language.
-* **Engine:** LangChain + Ollama (DeepSeek/Llama3).
-* **Capability:** Converts requests like *"Identify all railway stations within the city center"* into complex PostGIS SQL queries.
-* **Output:** Generates GeoJSON data rendered dynamically on the tactical map.
+The project follows a modern **three-tier architecture** with a specialized AI integration layer:
 
-### 2. 🛰️ Optical Recon (SCAN Mode)
-Visual terrain analysis via satellite imagery.
-* **Engine:** Contextily + Ollama (LLaVA/Vision Model).
-* **Capability:** Downloads high-resolution satellite tiles of the current viewport and transmits them to a Multimodal AI.
-* **Output:** A concise, military-style report covering urban density, critical infrastructure, and terrain features.
+### 1. Frontend (Tactical Web UI)
+A "military-grade" interface built with **Tailwind CSS** and **Leaflet.js**.
+* **Tactical HUD**: Features a dark-mode interface with CRT-style scanline effects, glowing amber aesthetics, and a crosshair targeting system.
+* **Dynamic Mapping**: Renders GeoJSON data returned by the server directly onto the map as interactive layers.
+* **Live Intel**: Tracks mouse coordinates and map bounds in real-time for precise situational awareness.
 
-### 3. 🖥️ "War Room" Interface
-* Interactive map with hybrid satellite/street layers.
-* Futuristic/Military aesthetic (Tailwind CSS).
-* Real-time visual feedback (System Loaders, HUD, Event Logs).
+### 2. Backend (FastAPI Core)
+The robust Python server (`server.py`) acts as the mission control:
+* **Routing**: Manages asynchronous API requests for chat interactions and satellite scans.
+* **Data Processing**: Converts raw SQL results into **GeoPandas DataFrames** for seamless GeoJSON serialization.
+* **Self-Correction Logic**: Includes an autonomous retry loop that attempts to fix invalid SQL queries up to 3 times by feeding the database error back into the LLM.
 
----
+### 3. Intelligence Layer (LangChain + Ollama)
+* **SQL Agent**: Translates natural language into **PostGIS-enabled PostgreSQL** queries. It identifies relevant tables (e.g., `fermate_metro`) and ensures geometric columns are included.
+* **Vision Agent**: Captures map areas, processes them through the **Pillow** library, and utilizes **Ollama Vision Models** (like Moondream or LLaVA) to provide real-time terrain descriptions.
 
-## 🛠️ Tech Stack
-
-* **Backend:** Python 3.10+, FastAPI.
-* **Database:** PostgreSQL + PostGIS.
-* **AI/LLM:** Ollama (Local), LangChain.
-* **Geospatial:** GeoPandas, SQLAlchemy, Contextily, Shapely.
-* **Frontend:** HTML5, Tailwind CSS, Leaflet.js.
+### 4. Data Layer (PostGIS)
+* A specialized **PostgreSQL** instance with the **PostGIS** extension to handle complex spatial relationships, coordinates, and geometry data types.
 
 ---
 
-## 🚀 Installation & Deployment
+## 🚀 Key Features
+
+### 📡 Natural Language to Spatial SQL
+Operators can issue verbal-style commands like *"Show me all metro stations on Line 4"* or *"List all infrastructure in the center"*. The system generates the SQL, executes it, and maps the result markers instantly.
+
+### 🛰️ Satellite Intel Scan
+A specialized reconnaissance tool:
+1.  **Coordinate Capture**: Extracts the current geographic bounds (N, S, E, W) from the map viewport.
+2.  **Tile Retrieval**: Downloads high-resolution satellite imagery via **Contextily** (Esri World Imagery).
+3.  **AI Reconnaissance**: The image is analyzed by a Vision model to identify urban density, vegetation, or tactical features.
+
+---
+
+## 🛠️ Technology Stack
+
+| Component | Technology |
+| :--- | :--- |
+| **Language** | Python 3.10+ |
+| **API Framework** | FastAPI |
+| **Database** | PostgreSQL + PostGIS |
+| **AI Orchestration** | LangChain / Ollama |
+| **GIS Libraries** | GeoPandas, Contextily, Leaflet.js |
+| **Frontend** | HTML5, Tailwind CSS, JavaScript |
+
+---
+
+## 🚦 Getting Started
 
 ### Prerequisites
-Ensure the following systems are active:
-* [Ollama](https://ollama.com/) (running `deepseek-v3` or equivalent, and `llava`).
-* PostgreSQL with PostGIS extension enabled.
-* Python 3.9+.
+* **Ollama** installed (running an LLM for Text and Vision).
+* **PostgreSQL** instance with the **PostGIS** extension.
 
-### 1. Clone Repository
-```bash
-git clone [https://github.com/your-username/aegis-geo-agent.git](https://github.com/your-username/aegis-geo-agent.git)
-cd aegis-geo-agent
+### Quick Start
+1.  **Install Dependencies**:
+    ```bash
+    pip install fastapi uvicorn geopandas sqlalchemy langchain_ollama contextily pillow
+    ```
+2.  **Environment Setup**: Configure your credentials in `agent.py`:
+    ```python
+    DB_USER = "postgres"
+    DB_PASS = "your_password"
+    DB_HOST = "192.168.1.48"
+    ```
+3.  **Launch Server**:
+    ```bash
+    python server.py
+    ```
+4.  **Engage**: Open `index.html` in a browser to initialize the HUD.
+
+---
+
+> **A.E.G.I.S. // SECURED GEOSPATIAL ACCESS**
