@@ -100,11 +100,13 @@ async def chat_endpoint(request: ChatRequest):
 @app.post("/api/scan")
 async def scan_endpoint(request: ScanRequest):
     print(f"\n--- RICHIESTA SCAN SATELLITARE ---")
+    # Log dei parametri della buonding box
     print(f"BBox: {request.west:.4f}, {request.south:.4f}, {request.east:.4f}, {request.north:.4f}")
 
     try:
         # 1. Scarica l'immagine (Tile)
         print("Scaricamento tiles...")
+        # Utilizzo contextily per ottenere l'immagine satellitare
         img, ext = ctx.bounds2img(
             request.west, request.south, request.east, request.north,
             ll=True,
@@ -121,7 +123,7 @@ async def scan_endpoint(request: ScanRequest):
             pil_img = pil_img.convert('RGB')
         
         # Ridimensiona per non sovraccaricare l'LLM
-        pil_img.thumbnail((1024, 1024)) 
+        pil_img.thumbnail((2048, 2048)) 
         
         # 3. Conversione in Bytes (senza salvataggio su disco)
         buff = BytesIO()

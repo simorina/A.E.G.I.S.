@@ -24,7 +24,7 @@ DB_URI = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 engine = None
 db = None
 llm = None
-llm_vision = None
+llm = None
 
 try:
     # Creazione Engine SQLAlchemy
@@ -38,11 +38,8 @@ except Exception as e:
     print(f"--- ERRORE Connessione DB: {e} ---")
 
 # Inizializzazione LLM (Text/SQL)
-llm = ChatOllama(model="deepseek-V3.1:671b-cloud", temperature=0, base_url=LLM_URL)
+llm = ChatOllama(model="qwen3-vl:235b-cloud", temperature=0, base_url=LLM_URL)
 
-# Inizializzazione LLM (Vision)
-# Assicurati di aver fatto 'ollama pull llava'
-llm_vision = ChatOllama(model="llava", temperature=0.1, base_url=LLM_URL)
 
 
 # --- 3. FUNZIONI DI UTILITÀ ---
@@ -92,7 +89,7 @@ def analyze_satellite_image(image_data: bytes) -> str:
     )
     
     # 4. Invocazione
-    response = llm_vision.invoke([message])
+    response = llm.invoke([message])
     return response.content
 # --- 4. TEMPLATES & PROMPTS (SQL) ---
 sql_template = """
