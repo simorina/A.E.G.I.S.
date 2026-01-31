@@ -1,84 +1,253 @@
-/* --- CONFIGURAZIONE COLORI --- */
 :root {
-    --ops-bg: #0f1115;
-    --ops-panel: #1a1d24;
-    --ops-accent: #f59e0b; /* Amber 500 */
-    --ops-text: #e2e8f0;
+    --amber: #f59e0b;
+    --bg-dark: #050505;
 }
 
-body {
-    background-color: var(--ops-bg);
+/* --- 1. RESET E BASE --- */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--bg-dark);
+    overflow: hidden;
 }
 
-/* --- STILE MAPPA SATELLITARE --- */
-/* Rimuoviamo l'invert, mettiamo un leggero filtro per sembrare una ripresa digitale */
+/* --- 2. MAPPA LEAFLET --- */
+#map {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-dark);
+    z-index: 1; /* Livello base */
+}
+
+/* Filtro stile Radar/Notturno */
 .leaflet-layer {
-    filter: contrast(1.1) saturate(0.8) brightness(0.9);
+    filter: brightness(0.6) contrast(1.4) saturate(0.2) sepia(0.4) hue-rotate(15deg) !important;
 }
 
-/* --- SIDEBAR --- */
+/* Assicura che i controlli (zoom) siano cliccabili */
+.leaflet-control-container {
+    z-index: 1000 !important;
+}
+
+/* --- 3. OVERLAYS (HUD) - PASSIVI --- */
+.overlay-vignette, 
+.overlay-grid, 
+.crosshair {
+    position: fixed;
+    inset: 0;
+    z-index: 500; /* Sopra la mappa */
+    pointer-events: none !important; /* Click passanti */
+    user-select: none !important;
+    touch-action: none !important;
+}
+
+.overlay-vignette {
+    background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.9) 100%);
+}
+
+.overlay-grid {
+    background-image: 
+        linear-gradient(rgba(245, 158, 11, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(245, 158, 11, 0.05) 1px, transparent 1px);
+    background-size: 50px 50px;
+}
+
+/* --- 4. SIDEBAR & MENU --- */
 .sidebar {
-    background: var(--ops-panel);
-    border-right: 1px solid #333;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 380px;
+    height: 100vh;
+    z-index: 2000; /* Sopra mappa e overlays */
+    background: rgba(10, 10, 10, 0.96);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid var(--amber);
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.8);
 }
 
-.sidebar::-webkit-scrollbar { width: 6px; }
-.sidebar::-webkit-scrollbar-track { background: var(--ops-bg); }
-.sidebar::-webkit-scrollbar-thumb { background: #444; }
+.sidebar.closed {
+    transform: translateX(-100%);
+}
 
-/* --- CHAT BUBBLES --- */
+.menu-toggle {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    z-index: 2100;
+    width: 45px;
+    height: 45px;
+    background: black;
+    border: 1px solid var(--amber);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.3s ease;
+}
+
+.menu-toggle:hover {
+    box-shadow: 0 0 15px var(--amber);
+}
+
+.bar { width: 20px; height: 2px; background: var(--amber); transition: 0.3s; }
+
+/* Animazione Hamburger -> X */
+.menu-toggle.active .bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.menu-toggle.active .bar:nth-child(2) { opacity: 0; }
+.menu-toggle.active .bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+
+/* --- 5. GLOBAL PRELOADER --- */
+#global-loader {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(5, 5, 5, 1);
+    z-index: 9999; /* Sopra TUTTO */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    transition: opacity 0.6s ease-out, visibility 0.6s;
+}
+
+#global-loader.fade-out {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.loader-text {
+    margin-top: 50px;
+    font-family: 'Chakra Petch', sans-serif;
+    color: var(--amber);
+    font-size: 14px;
+    letter-spacing: 4px;
+    animation: pulse 1s infinite;
+}
+
+/* --- 6. LOADER ANIMATION (IL TUO SPINNER) --- */
+.loader {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    background: #de3500;
+    transform: rotateX(65deg) rotate(45deg);
+    color: #fff;
+    animation: layers1 1s linear infinite alternate;
+    margin: 0 auto; /* Centratura automatica nei contenitori */
+}
+
+.loader:after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.7);
+    animation: layerTr 1s linear infinite alternate;
+}
+
+@keyframes layers1 {
+    0% { box-shadow: 0px 0px 0 0px }
+    90% , 100% { box-shadow: 20px 20px 0 -4px }
+}
+
+@keyframes layerTr {
+    0% { transform: translate(0, 0) scale(1) }
+    100% { transform: translate(-25px, -25px) scale(1) }
+}
+
+/* --- 7. CHAT LOADER CONTAINER --- */
+/* Stile per il loader quando è dentro la chat sidebar */
+.chat-loader-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px 0;
+    margin: 10px 0;
+    border-top: 1px dashed rgba(245, 158, 11, 0.2);
+    border-bottom: 1px dashed rgba(245, 158, 11, 0.2);
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* --- 8. CHAT MESSAGES STYLE --- */
 .msg-user {
-    background: #2d3748; /* Grigio bluastro militare */
-    color: white;
-    padding: 8px 12px;
-    margin-left: 2rem;
-    border-left: 3px solid var(--ops-accent);
-    font-size: 0.9rem;
+    background: rgba(245, 158, 11, 0.1);
+    border-left: 3px solid var(--amber);
     clip-path: polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px));
 }
 
 .msg-ai {
-    background: transparent;
-    border: 1px solid #4a5568;
-    color: #cbd5e0;
-    padding: 10px;
-    margin-right: 2rem;
-    font-size: 0.9rem;
-}
-.msg-ai strong { color: var(--ops-accent); }
-
-/* --- SPINNER MILITARE (Quadrato Rotante) --- */
-.spinner-military {
-    width: 20px;
-    height: 20px;
-    border: 2px solid var(--ops-accent);
-    border-top-color: transparent;
-    border-radius: 0; /* Quadrato per look più rigido */
-    animation: spin 1s linear infinite;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-@keyframes spin {
-    to { transform: rotate(360deg); }
+/* --- 9. POPUP TATTICI LEAFLET --- */
+/* Z-Index cruciale: deve stare sopra gli overlay (500) ma sotto la sidebar (2000) */
+.leaflet-pane.leaflet-popup-pane {
+    z-index: 700 !important;
 }
 
-/* --- INDICATORE STATUS --- */
-.status-indicator {
-    width: 10px;
-    height: 10px;
-    background-color: #10b981; /* Verde "Online" */
-    border-radius: 50%;
-    box-shadow: 0 0 10px #10b981;
-    animation: pulse 2s infinite;
-}
-
-/* --- CUSTOM POPUP LEAFLET --- */
-.leaflet-popup-content-wrapper {
-    background: rgba(10, 10, 10, 0.9) !important;
-    border: 1px solid var(--ops-accent);
-    color: white !important;
-    border-radius: 0 !important;
-    font-family: 'Chakra Petch', sans-serif;
-}
+.leaflet-popup-content-wrapper, 
 .leaflet-popup-tip {
-    background: var(--ops-accent);
+    background: rgba(8, 8, 8, 0.95) !important;
+    border: 1px solid var(--amber) !important;
+    border-radius: 0 !important; /* Squadrato */
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.3) !important;
+    color: #e2e8f0 !important;
+    backdrop-filter: blur(5px);
 }
+
+.leaflet-popup-tip {
+    background: var(--amber) !important;
+}
+
+.leaflet-popup-content {
+    margin: 0 !important;
+    min-width: 240px !important;
+}
+
+.leaflet-popup-close-button {
+    color: var(--amber) !important;
+    font-size: 16px !important;
+    top: 5px !important;
+    right: 5px !important;
+}
+
+/* Stili interni del Popup */
+.popup-header {
+    background: rgba(245, 158, 11, 0.15);
+    border-bottom: 1px solid var(--amber);
+    padding: 8px 12px;
+    font-family: 'Chakra Petch', sans-serif;
+    font-weight: 700;
+    color: var(--amber);
+    text-transform: uppercase;
+}
+
+.popup-body {
+    padding: 10px;
+    font-family: 'VT323', monospace;
+    font-size: 15px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.data-row {
+    display: flex;
+    justify-content: space-between;
+    border-bottom: 1px dotted rgba(255,255,255,0.15);
+    padding: 3px 0;
+}
+
+.data-label { color: #94a3b8; text-transform: uppercase; margin-right: 10px; }
+.data-value { color: #fff; text-align: right; }
