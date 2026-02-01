@@ -6,7 +6,8 @@ const map = L.map('map', {
     scrollWheelZoom: true,
     tap: false,       // Fix per touch/mobile
     inertia: true,
-    worldCopyJump: true
+    worldCopyJump: true,
+    Animations: true
 }).setView([45.4642, 9.1900], 13);
 
 // --- 2. FIX INTERAZIONE E RESIZE ---
@@ -36,7 +37,7 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     maxZoom: 19,
-    opacity: 0.6
+    opacity: 1
 }).addTo(map);
 
 // Controllo Zoom in basso a destra
@@ -69,7 +70,7 @@ window.addEventListener('load', () => {
 
 // --- 5. LOGICA LOADER CHAT ---
 // Funzione per creare e appendere lo spinner dentro la chat history
-function showChatLoader() {
+function showChatLoader(type) {
     const history = document.getElementById('chat-history');
     if (!history) return;
 
@@ -78,7 +79,13 @@ function showChatLoader() {
     loaderContainer.className = 'chat-loader-container';
     
     // Inseriamo lo spinner rosso definito nel CSS
-    loaderContainer.innerHTML = '<div class="loader"></div>';
+    if (type === 'text')
+        loaderContainer.innerHTML = '<div class="textLoader"></div>';
+    else if (type === 'optic')
+        loaderContainer.innerHTML = '<div class="opticLoader"></div>';
+    else
+        loaderContainer.innerHTML = '<div class="textLoader"></div>'; // Default
+    
     
     history.appendChild(loaderContainer);
     history.scrollTop = history.scrollHeight; // Scroll automatico in basso
@@ -104,11 +111,11 @@ async function sendMessage() {
     inputField.value = '';
     
     // B. Mostra Loader nella chat
-    showChatLoader();
+    showChatLoader('text');
 
     try {
         // C. Chiamata API
-        const response = await fetch('http://localhost:8000/api/chat', {
+        const response = await fetch('http://192.168.1.252:8000/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: message })
@@ -146,10 +153,10 @@ async function performScan() {
     };
 
     addMessage("STARTING OPTIC SCANNING...", 'user');
-    showChatLoader(); // Mostra loader
+    showChatLoader('optic'); // Mostra loader
 
     try {
-        const response = await fetch('http://localhost:8000/api/scan', {
+        const response = await fetch('http://192.168.1.252:8000/api/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -162,6 +169,7 @@ async function performScan() {
     } catch (error) {
         removeChatLoader();
         addMessage("SCAN_ERROR: Sensori offline.", 'ai');
+        // addMessage("SAT-LINK ERROR:", error.toString(), 'ai');
     }
 }
 
@@ -177,8 +185,8 @@ function addMessage(text, sender) {
         div.classList.add('msg-user', 'self-end', 'ml-8');
         div.innerText = `> ${text}`;
     } else if (sender === 'ai-vision') {
-        div.classList.add('msg-ai', 'mr-8', 'border-l-2', 'border-blue-500');
-        div.innerHTML = `<strong class="text-blue-400 font-mono text-xs">[VISION_AI]</strong><br>${text}`;
+        div.classList.add('msg-ai', 'mr-8', 'border-l-2', 'border-amber-400');
+        div.innerHTML = `<strong class="text-amber-400 font-mono text-xs">[VISION_AI]</strong><br>${text}`;
     } else {
         div.classList.add('msg-ai', 'mr-8');
         div.innerHTML = `<strong class="text-amber-500 font-mono text-xs">[OP_INTEL]</strong><br>${text}`;

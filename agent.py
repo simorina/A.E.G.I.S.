@@ -1,6 +1,7 @@
 import os
 import re
 import base64
+from typing import Optional
 from sqlalchemy import create_engine
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
@@ -9,63 +10,41 @@ from langchain_community.utilities import SQLDatabase
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
 
-# --- 1. CONFIGURAZIONE ---
-DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASS = os.getenv("DB_PASS", "postgres")
-DB_HOST = os.getenv("DB_HOST", "192.168.1.48")
-DB_PORT = os.getenv("DB_PORT", "5432")
-DB_NAME = os.getenv("DB_NAME", "postgres")
-TARGET_SCHEMA = os.getenv("TARGET_SCHEMA", "schema1")
-LLM_URL = os.getenv("LLM_URL", "192.168.1.48:11434")
+# --- 1. CONFIGURATION ---
+class Config:
+    DB_URI = f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASS', 'postgres')}@" \
+             f"{os.getenv('DB_HOST', '192.168.1.48')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'postgres')}"
+    SCHEMA = os.getenv("TARGET_SCHEMA", "schema1")
+    LLM_URL = os.getenv("LLM_URL", "http://192.168.1.48:11434")
+    MODEL_NAME = "qwen3-vl:235b-cloud"
 
-DB_URI = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-# --- 2. SETUP DATABASE E LLM ---
-engine = None
-db = None
-llm = None
-llm = None
-
+# --- 2. COMPONENTS INITIALIZATION ---
 try:
-    # Creazione Engine SQLAlchemy
-    engine = create_engine(DB_URI)
-    # Creazione Wrapper LangChain
-    db = SQLDatabase.from_uri(DB_URI, schema=TARGET_SCHEMA)
-    
-    print(f"TABELLE RILEVATE: {db.get_table_names()}")
-    print("--- Connessione DB Riuscita (Backend) ---")
+    engine = create_engine(Config.DB_URI)
+    db = SQLDatabase.from_uri(Config.DB_URI, schema=Config.SCHEMA)
+    print(f"Connected to DB. Tables: {db.get_table_names()}")
 except Exception as e:
-    print(f"--- ERRORE Connessione DB: {e} ---")
+    print(f"Critical DB Error: {e}")
+    db = None
+    engine = None
 
-# Inizializzazione LLM (Text/SQL)
-llm = ChatOllama(model="qwen3-vl:235b-cloud", temperature=0, base_url=LLM_URL)
+# LLM Initialization
+llm = ChatOllama(model=Config.MODEL_NAME, temperature=0, base_url=Config.LLM_URL)
 
-
-
-# --- 3. FUNZIONI DI UTILITÀ ---
+# --- 3. CORE FUNCTIONS ---
 def extract_sql_from_response(llm_response: str) -> str:
-    """
-    Pulisce l'output dell'LLM per estrarre solo la query SQL valida.
-    """
-    clean_text = llm_response.replace("```sql", "").replace("```", "").strip()
+    """Cleans LLM output to extract executable SQL."""
+    clean_text = re.sub(r'```sql|```', '', llm_response, flags=re.IGNORECASE).strip()
     match = re.search(r'\b(WITH|SELECT)\b', clean_text, re.IGNORECASE)
-    
     if match:
         clean_text = clean_text[match.start():]
-    
-    if ";" in clean_text:
-        clean_text = clean_text.split(";")[0]
-        
-    return clean_text
+    return clean_text.split(';')[0] if ';' in clean_text else clean_text
 
 def analyze_satellite_image(image_data: bytes) -> str:
-    """
-    Prende i byte di un'immagine, li converte in base64 e interroga il Vision Model.
-    """
-    # 1. Encode Base64
+    """Processes image bytes via Vision Model."""
     img_b64 = base64.b64encode(image_data).decode("utf-8")
     
-    # 2. Prompt Tattico
+    # PROMPT INVARIATO (Come richiesto)
     prompt_text = """
     ROLE: Tactical Geospatial Analyst.
     TASK: Analyze this satellite image of the Milan area.
@@ -77,21 +56,15 @@ def analyze_satellite_image(image_data: bytes) -> str:
     Keep it concise and actionable.
     """
 
-    # 3. Costruzione Messaggio Multimodale LangChain
-    message = HumanMessage(
-        content=[
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"},
-            },
-        ]
-    )
+    message = HumanMessage(content=[
+        {"type": "text", "text": prompt_text},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+    ])
     
-    # 4. Invocazione
-    response = llm.invoke([message])
-    return response.content
-# --- 4. TEMPLATES & PROMPTS (SQL) ---
+    return llm.invoke([message]).content
+
+# --- 4. PROMPTS & CHAINS ---
+# SQL_TEMPLATE INVARIATO (Come richiesto)
 sql_template = """
 ### ROLE
 You are a Senior PostGIS Data Engineer specialized in geospatial queries for the city of Milan.
@@ -103,10 +76,11 @@ Your goal is to generate accurate, efficient, and syntactically correct PostgreS
 ### GUIDELINES & CONSTRAINTS
 
 1. **Schema Awareness**:
-   - ALWAYS prefix table names with the schema name (e.g., `schema_name.table_name`).
+   - ALWAYS prefix table names with the schema name (e.g., `schema_name.table_name`), in your case use schema1
    - NEVER hallucinate columns. Use ONLY the columns defined in the provided tables.
 2. **Query Structure**:
-    - Always in output the geometry column must be included if present in the table (can assume different names like: geom, geometry, the_geom).
+    - the parks table is named already have a geom column.
+    - the other tables don't so if called use postgis functions to create geometries from longitude and latitude columns.
 ### ERROR CORRECTION
 If a previous error occurred, analyze it deeply.
 PREVIOUS ERROR: {error}
@@ -120,14 +94,9 @@ DEFAULT LIMIT: {top_k}
 """
 
 sql_prompt = ChatPromptTemplate.from_template(sql_template)
+generate_query_chain = create_sql_query_chain(llm, db, sql_prompt, k=100) if db else None
 
-# --- 5. CHAIN DEFINITIONS ---
-if db and llm:  
-    generate_query_chain = create_sql_query_chain(llm, db, sql_prompt, k=100)
-else:
-    generate_query_chain = None
-
-# Chain per il sommario testuale
+# SUMMARY_TEMPLATE INVARIATO (Come richiesto)
 summary_template = """
 Analyze the following data:
 {data_summary}
@@ -136,5 +105,4 @@ You are a virtual assistant.
 Write a short and helpful response for the user based on the data above.
 Response:
 """
-summary_prompt = ChatPromptTemplate.from_template(summary_template)
-summary_chain = summary_prompt | llm | StrOutputParser()
+summary_chain = ChatPromptTemplate.from_template(summary_template) | llm | StrOutputParser()
