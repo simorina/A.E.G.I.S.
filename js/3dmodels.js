@@ -1,4 +1,3 @@
-
 import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
         import { MeshSurfaceSampler } from 'three/addons/math/MeshSurfaceSampler.js';
@@ -327,5 +326,4 @@ import * as THREE from 'three';
         }, 150);
 
         init();
-        
         

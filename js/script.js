@@ -115,7 +115,7 @@ async function sendMessage() {
 
     try {
         // C. Chiamata API
-        const response = await fetch('http://192.168.1.252:8000/api/chat', {
+        const response = await fetch('http://localhost:8000/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message: message })
@@ -156,7 +156,7 @@ async function performScan() {
     showChatLoader('optic'); // Mostra loader
 
     try {
-        const response = await fetch('http://192.168.1.252:8000/api/scan', {
+        const response = await fetch('http://localhost:8000/api/scan', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
