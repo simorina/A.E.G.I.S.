@@ -1,6 +1,6 @@
 import uvicorn
 import geopandas as gpd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -25,6 +25,49 @@ class ChatRequest(BaseModel):
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
 
+
+class LoginRequest(BaseModel):
+    operator_id: str
+    access_key: str
+
+# --- ENDPOINTS ---
+
+@app.post("/api/login")
+async def login_endpoint(creds: LoginRequest):
+    """
+    Verifica le credenziali contro la tabella 'agents' nel DB.
+    """
+    try:
+        # Query parametrizzata per sicurezza
+        query = text("SELECT * FROM schema1.auth WHERE username = :username AND password = :password")
+        
+        # Eseguiamo la query usando una connessione dal pool dell'engine
+        with engine.connect() as conn:
+            # Passiamo i parametri in modo sicuro
+            result = conn.execute(query, {"username": creds.operator_id, "password": creds.access_key}).fetchone()
+
+        if result:
+            # Login Successo
+            return {
+                "status": "AUTHORIZED",
+                "clearance": result[0],
+                "token": "SESSION_eyJhbGciOiJIUzI1NiJ9_ACTIVE" # Fake token per la UI
+            }
+        else:
+            # Login Fallito
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="CREDENTIALS_INVALID"
+            )
+            
+    except Exception as e:
+        print(f"Login Error: {e}")
+        # Se c'è un errore tecnico, ritorniamo comunque 401 per non esporre dettagli
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, 
+            detail="AUTH_SYSTEM_FAILURE"
+        )
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     if not engine or not generate_query_chain:
@@ -36,7 +79,7 @@ async def chat_endpoint(request: ChatRequest):
             # Step 1: Generate Query
             raw_response = generate_query_chain.invoke({"question": request.message, "error": last_error})
             query = extract_sql_from_response(raw_response)
-            print(f"Generated Query: {query}")
+            print(f"Generated SQL Query: {query}")
             if not query:
                 raise ValueError("LLM generated an empty query.")
 
@@ -73,6 +116,7 @@ async def scan_endpoint(request: ScanRequest):
         pil_img = Image.fromarray(img).convert('RGB')
         pil_img.thumbnail((1024, 1024))
         
+        # Save to buffer
         buff = BytesIO()
         pil_img.save(buff, format="JPEG", quality=85)
         

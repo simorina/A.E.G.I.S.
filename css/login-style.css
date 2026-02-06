@@ -1,0 +1,176 @@
+:root {
+    --intel-orange: #f59e0b;
+    --intel-orange-dim: rgba(245, 158, 11, 0.15);
+    --intel-bg: #050505;
+    --grid-color: rgba(245, 158, 11, 0.05);
+}
+
+body { 
+    margin: 0; 
+    background-color: var(--intel-bg);
+    /* Tactical Grid Background */
+    background-image: 
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+    background-size: 40px 40px;
+    color: var(--intel-orange);
+    overflow: hidden; 
+    font-family: 'Courier New', Courier, monospace;
+    display: flex;
+    height: 100vh;
+}
+
+/* --- CRT Vignette & Scanline Overlay --- */
+body::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 999;
+    background-size: 100% 2px, 3px 100%;
+    pointer-events: none;
+}
+
+body::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.8) 100%);
+    z-index: 998;
+    pointer-events: none;
+}
+
+/* --- Layout --- */
+#login-section {
+    width: 350px;
+    height: 100%;
+    border-right: 1px solid var(--intel-orange-dim);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 40px;
+    box-sizing: border-box;
+    background: rgba(10, 10, 10, 0.85);
+    backdrop-filter: blur(5px);
+    position: relative;
+    z-index: 100;
+    box-shadow: 10px 0 50px rgba(0,0,0,0.8);
+}
+
+#canvas-container {
+    flex-grow: 1;
+    height: 100%;
+    position: relative;
+}
+
+/* --- Typography & Glow --- */
+.header {
+    margin-bottom: 50px;
+    border-left: 4px solid var(--intel-orange);
+    padding-left: 15px;
+}
+
+.header h1 {
+    font-size: 1.8rem;
+    margin: 0;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px var(--intel-orange);
+    text-transform: uppercase;
+}
+
+.sub-header {
+    font-size: 0.6rem;
+    letter-spacing: 3px;
+    opacity: 0.8;
+}
+
+/* --- Inputs (Tactical Bracket Style) --- */
+.input-group {
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.input-group label {
+    display: block;
+    font-size: 0.6rem;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--intel-orange);
+}
+
+input {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--intel-orange-dim);
+    border-left: 2px solid var(--intel-orange);
+    padding: 15px;
+    color: var(--intel-orange);
+    font-family: inherit;
+    font-size: 1rem;
+    outline: none;
+    transition: all 0.3s;
+    box-sizing: border-box;
+}
+
+input:focus {
+    border-color: var(--intel-orange);
+    background: rgba(245, 158, 11, 0.05);
+    box-shadow: 0 0 15px var(--intel-orange-dim);
+}
+
+input::placeholder {
+    color: rgba(245, 158, 11, 0.3);
+}
+
+/* --- Button (Hollow Tech Style) --- */
+button {
+    width: 100%;
+    background: transparent;
+    color: var(--intel-orange);
+    border: 1px solid var(--intel-orange);
+    padding: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 4px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+button:hover {
+    background: var(--intel-orange);
+    color: #000;
+    box-shadow: 0 0 20px var(--intel-orange);
+}
+
+/* --- System Status (Data Stream) --- */
+.system-status {
+    margin-top: auto;
+    font-size: 0.6rem;
+    line-height: 1.6;
+    border-top: 1px solid var(--intel-orange-dim);
+    padding-top: 20px;
+    opacity: 0.7;
+}
+
+.blink { animation: blinker 1s linear infinite; }
+@keyframes blinker { 50% { opacity: 0; } }
+
+/* --- HUD Decorations --- */
+.decor-line {
+    position: absolute;
+    background: var(--intel-orange);
+    opacity: 0.3;
+}
+.decor-line.top { top: 40px; right: 40px; width: 200px; height: 1px; }
+.decor-line.bottom { bottom: 40px; right: 40px; width: 100px; height: 1px; }
+
+/* Glitch Animation Class */
+.glitch-text {
+    position: relative;
+}

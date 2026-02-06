@@ -1,90 +1,142 @@
 <!DOCTYPE html>
-<html lang="it">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>US DEFENSE // SAT-LINK</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css">
+    <title>Military Intelligence - Access Portal</title>
+    <link rel="stylesheet" href="css/login-style.css">
 </head>
-<body class="h-screen w-screen overflow-hidden bg-black text-white">
+<body>
 
-    <div id="global-loader">
-        <div class="loader"></div>
-        <div class="loader-text">SETTING UP...</div>
-    </div>
-
-    <button onclick="toggleSidebar()" class="menu-toggle" aria-label="Toggle Menu">
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-    </button>
-
-    <aside id="sidebar" class="sidebar closed">
-        <div class="flex flex-col h-full p-6 bg-black/90 backdrop-blur-md border-r border-amber-500/30">
-            <div class="border-b border-amber-500/20 pb-4 mb-6 mt-12">
-                <h1 class="text-2xl font-bold tracking-tighter text-amber-500 font-['Chakra_Petch'] uppercase">
-                    SAT-LINK <span class="text-white opacity-50">v4.0</span>
-                </h1>
-                <div class="text-[10px] text-amber-500/60 font-mono tracking-[0.2em]">ENCRYPTED CONNECTION</div>
-            </div>
-            
-            <div id="chat-history" class="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 scrollbar-custom">
-                <div class="bg-amber-500/5 border-l-2 border-amber-500 p-3 text-sm text-gray-300 font-['Chakra_Petch']">
-                    <strong class="text-amber-500">SYSTEM:</strong> TERMINAL READY. AWAITING TARGET COORDINATES.
-                </div>
-            </div>
-
-            <div class="mt-auto space-y-4">
-                <div class="bg-white/5 border border-white/10 p-1 flex shadow-inner">
-                    <input type="text" id="user-input" 
-                           class="w-full bg-transparent text-white p-2 focus:outline-none font-mono text-sm placeholder-gray-700" 
-                           placeholder="ENTER COMMAND..." 
-                           autocomplete="off">
-                    <button onclick="sendMessage()" class="bg-amber-600 hover:bg-amber-500 text-black font-bold px-4 py-2 font-['Chakra_Petch'] transition-colors">
-                        EXECUTE
-                    </button>
-                </div>
-
-                <button onclick="performScan()" class="w-full bg-amber-900/20 hover:bg-amber-900/40 border border-amber-500/50 text-amber-500 py-3 uppercase font-['Chakra_Petch'] text-sm tracking-widest transition-all">
-                    RECON SCAN
-                </button>
-            </div>
-        </div>
-    </aside>
-
-    <main class="fixed inset-0 z-1">
-        <div id="map" class="h-full w-full"></div>
-        
-        <div class="overlay-vignette"></div>
-        <div class="overlay-grid"></div>
-        
-        <div class="crosshair">
-            <div class="crosshair-h"></div>
-            <div class="crosshair-v"></div>
-            <div class="crosshair-box"></div>
+    <section id="login-section">
+        <div class="header">
+            <h1 id="title-glitch" data-value="INTEL_CORE_v8.4">INTEL_CORE_v8.4</h1>
+            <div class="sub-header">AUTHORIZED PERSONNEL ONLY // CLASS_A</div>
         </div>
 
-        <div class="absolute bottom-10 right-10 z-[1000] font-mono text-[10px] text-amber-500/80 bg-black/80 border border-amber-500/30 p-4 backdrop-blur-sm pointer-events-none">
-            <div class="flex justify-between gap-8">
-                <span>LAT: <span id="lat-disp" class="text-white">--.----</span></span>
-                <span>LNG: <span id="lng-disp" class="text-white">--.----</span></span>
+        <form id="login-form">
+            <div class="input-group">
+                <label>Operator_ID</label>
+                <input type="text" placeholder="CMD_USR_XXXX" autocomplete="off" id="input-id" required>
             </div>
-            <div class="mt-1 opacity-50">SIGNAL STRENGTH: 98%</div>
-        </div>
-    </main>
+            <div class="input-group">
+                <label>Access_Key</label>
+                <input type="password" placeholder="••••••••" autocomplete="off" id="input-key" required>
+            </div>
+            <button type="submit" id="btn-auth">Initialize_Session</button>
+        </form>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        function toggleSidebar() {
-            const sb = document.getElementById('sidebar');
-            const btn = document.querySelector('.menu-toggle');
-            sb.classList.toggle('closed');
-            btn.classList.toggle('active');
+        <div class="system-status">
+            > CONNECTION: <span style="color:#fff">SECURE</span><br>
+            > ENCRYPTION: AES-256-GCM<br>
+            > UPLINK_STATUS: <span class="blink" id="status-text">WAITING FOR AUTH</span><br>
+            > MEMORY_ADDR: <span id="mem-addr">0x4F2A</span><br>
+            > MANUAL_CTRL: ACTIVE
+        </div>
+    </section>
+
+    <div class="decor-line top"></div>
+    <div class="decor-line bottom"></div>
+
+    <div id="canvas-container"></div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
         }
     </script>
-    <script src="js/script.js"></script>
+
+    <script src="js/3dmodels.js" type="module"></script>
+
+    <script>
+        // Gestione Random Hex
+        setInterval(() => {
+            const addr = document.getElementById('mem-addr');
+            addr.innerText = '0x' + Math.floor(Math.random()*16777215).toString(16).toUpperCase().substring(0, 4);
+        }, 150);
+
+        // Gestione Login Reale
+        const form = document.getElementById('login-form');
+        const btn = document.getElementById('btn-auth');
+        const statusText = document.getElementById('status-text');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // UI: Stato "Caricamento"
+            const originalText = btn.innerText;
+            btn.innerText = "VERIFYING CREDENTIALS...";
+            btn.style.opacity = "0.7";
+            btn.disabled = true;
+
+            const operatorId = document.getElementById('input-id').value;
+            const accessKey = document.getElementById('input-key').value;
+
+            try {
+                // Chiamata al server Python
+                const response = await fetch('http://localhost:8000/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        operator_id: operatorId, 
+                        access_key: accessKey 
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // UI: Successo
+                    btn.innerText = "ACCESS GRANTED // LEVEL " + data.clearance;
+                    btn.style.backgroundColor = "#4ade80"; // Verde hacker
+                    btn.style.color = "#000";
+                    btn.style.borderColor = "#4ade80";
+                    btn.style.boxShadow = "0 0 20px #4ade80";
+                    
+                    statusText.innerText = "ENCRYPTED TUNNEL OPEN";
+                    statusText.style.color = "#4ade80";
+
+                    // Redirect dopo 1.5 secondi
+                    setTimeout(() => {
+                        // Salva il token se vuoi usarlo nelle altre pagine
+                        sessionStorage.setItem('intel_token', data.token);
+                        // Reindirizza alla dashboard (crea questo file o cambia destinazione)
+                        window.location.href = 'aegis.html'; 
+                    }, 1500);
+
+                } else {
+                    throw new Error("Unauthorized");
+                }
+
+            } catch (error) {
+                // UI: Errore
+                console.error("Login failed:", error);
+                
+                btn.innerText = "ACCESS DENIED // INVALID KEY";
+                btn.style.backgroundColor = "transparent";
+                btn.style.color = "red";
+                btn.style.borderColor = "red";
+                btn.style.boxShadow = "0 0 15px red";
+                
+                // Shake effect (facoltativo, se vuoi aggiungere CSS)
+                form.style.transform = "translateX(5px)";
+                setTimeout(() => form.style.transform = "translateX(-5px)", 50);
+                setTimeout(() => form.style.transform = "translateX(0)", 100);
+
+                // Reset dopo 2 secondi
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.backgroundColor = ""; // Torna al default CSS
+                    btn.style.color = "";
+                    btn.style.borderColor = "";
+                    btn.style.boxShadow = "";
+                    btn.disabled = false;
+                }, 2000);
+            }
+        });
+    </script>
 </body>
 </html>

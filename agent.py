@@ -9,17 +9,27 @@ from langchain.chains.sql_database.query import create_sql_query_chain
 from langchain_community.utilities import SQLDatabase
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage
+from dotenv import load_dotenv
 
 # --- 1. CONFIGURATION ---
+load_dotenv()  # Load environment variables from .env file
+
 class Config:
-    DB_URI = f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASS', 'postgres')}@" \
-             f"{os.getenv('DB_HOST', '192.168.1.48')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'postgres')}"
-    SCHEMA = os.getenv("TARGET_SCHEMA", "schema1")
-    LLM_URL = os.getenv("LLM_URL", "http://192.168.1.48:11434")
-    MODEL_NAME = "qwen3-vl:235b-cloud"
+    DB_URI = f"postgresql://{os.environ['DB_USER']}:{os.environ['DB_PASS']}@" \
+             f"{os.environ['DB_HOST']}:{os.environ['DB_PORT']}/{os.environ['DB_NAME']}"
+    SCHEMA = os.environ["TARGET_SCHEMA"]
+    LLM_URL = os.environ["LLM_URL"]
+    MODEL_NAME = os.environ["MODEL_NAME"]
+
 
 # --- 2. COMPONENTS INITIALIZATION ---
 try:
+    print("Connecting to DB...")
+    print(f"DB URI: {Config.DB_URI}")
+    print(f"Schema: {Config.SCHEMA}")
+    print("LLM URL:", Config.LLM_URL)
+    print("Model Name:", Config.MODEL_NAME)
+    print("Initializing database connection...")
     engine = create_engine(Config.DB_URI)
     db = SQLDatabase.from_uri(Config.DB_URI, schema=Config.SCHEMA)
     print(f"Connected to DB. Tables: {db.get_table_names()}")
@@ -38,6 +48,8 @@ def extract_sql_from_response(llm_response: str) -> str:
     match = re.search(r'\b(WITH|SELECT)\b', clean_text, re.IGNORECASE)
     if match:
         clean_text = clean_text[match.start():]
+    
+    
     return clean_text.split(';')[0] if ';' in clean_text else clean_text
 
 def analyze_satellite_image(image_data: bytes) -> str:
@@ -79,8 +91,8 @@ Your goal is to generate accurate, efficient, and syntactically correct PostgreS
    - ALWAYS prefix table names with the schema name (e.g., `schema_name.table_name`), in your case use schema1
    - NEVER hallucinate columns. Use ONLY the columns defined in the provided tables.
 2. **Query Structure**:
-    - the parks table is named already have a geom column.
-    - the other tables don't so if called use postgis functions to create geometries from longitude and latitude columns.
+    - the table called parks, already have a geom column, so use that.
+    - the other tables don't have a geom column so, if you have to use them, use postgis functions to create geometries from longitude and latitude columns.
 ### ERROR CORRECTION
 If a previous error occurred, analyze it deeply.
 PREVIOUS ERROR: {error}

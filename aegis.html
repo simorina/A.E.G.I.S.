@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>US DEFENSE // SAT-LINK</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="h-screen w-screen overflow-hidden bg-black text-white">
+
+    <div id="global-loader">
+        <div class="loader"></div>
+        <div class="loader-text">SETTING UP...</div>
+    </div>
+
+    <button onclick="toggleSidebar()" class="menu-toggle" aria-label="Toggle Menu">
+        <div class="bar"></div>
+        <div class="bar"></div>
+        <div class="bar"></div>
+    </button>
+
+    <aside id="sidebar" class="sidebar closed">
+        <div class="flex flex-col h-full p-6 bg-black/90 backdrop-blur-md border-r border-amber-500/30">
+            <div class="border-b border-amber-500/20 pb-4 mb-6 mt-12">
+                <h1 class="text-2xl font-bold tracking-tighter text-amber-500 font-['Chakra_Petch'] uppercase">
+                    A.E.G.I.S <span class="text-white opacity-50">v4.0</span>
+                </h1>
+                <div class="text-[10px] text-amber-500/60 font-mono tracking-[0.2em]">ENCRYPTED CONNECTION</div>
+            </div>
+            
+            <div id="chat-history" class="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 scrollbar-custom">
+                <div class="bg-amber-500/5 border-l-2 border-amber-500 p-3 text-sm text-gray-300 font-['Chakra_Petch']">
+                    <strong class="text-amber-500">SYSTEM:</strong> TERMINAL READY. AWAITING TARGET COORDINATES.
+                </div>
+            </div>
+
+            <div class="mt-auto space-y-4">
+                <div class="bg-white/5 border border-white/10 p-1 flex shadow-inner">
+                    <input type="text" id="user-input" 
+                           class="w-full bg-transparent text-white p-2 focus:outline-none font-mono text-sm placeholder-gray-700" 
+                           placeholder="ENTER COMMAND..." 
+                           autocomplete="off">
+                    <button onclick="sendMessage()" class="bg-amber-600 hover:bg-amber-500 text-black font-bold px-4 py-2 font-['Chakra_Petch'] transition-colors">
+                        EXECUTE
+                    </button>
+                </div>
+
+                <button onclick="performScan()" class="w-full bg-amber-900/20 hover:bg-amber-900/40 border border-amber-500/50 text-amber-500 py-3 uppercase font-['Chakra_Petch'] text-sm tracking-widest transition-all">
+                    RECON SCAN
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <main class="fixed inset-0 z-1">
+        <div id="map" class="h-full w-full"></div>
+        
+        <div class="overlay-vignette"></div>
+        <div class="overlay-grid"></div>
+        
+        <div class="crosshair">
+            <div class="crosshair-h"></div>
+            <div class="crosshair-v"></div>
+            <div class="crosshair-box"></div>
+        </div>
+
+        <div class="absolute bottom-10 right-10 z-[1000] font-mono text-[10px] text-amber-500/80 bg-black/80 border border-amber-500/30 p-4 backdrop-blur-sm pointer-events-none">
+            <div class="flex justify-between gap-8">
+                <span>LAT: <span id="lat-disp" class="text-white">--.----</span></span>
+                <span>LNG: <span id="lng-disp" class="text-white">--.----</span></span>
+            </div>
+            <div class="mt-1 opacity-50">SIGNAL STRENGTH: 98%</div>
+        </div>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const btn = document.querySelector('.menu-toggle');
+            sb.classList.toggle('closed');
+            btn.classList.toggle('active');
+        }
+    </script>
+    <script src="js/script.js"></script>
+</body>
+</html>
