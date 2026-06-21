@@ -18,7 +18,7 @@ A "military-grade" interface built with **Tailwind CSS** and **Leaflet.js**.
 The robust Python server (`server.py`) acts as the mission control:
 * **Routing**: Manages asynchronous API requests for chat interactions and satellite scans.
 * **Data Processing**: Converts raw SQL results into **GeoPandas DataFrames** for seamless GeoJSON serialization.
-* **Self-Correction Logic**: Includes an autonomous retry loop that attempts to fix invalid SQL queries up to 3 times by feeding the database error back into the LLM.
+* **Thin Endpoints**: Deleghano all'agente (`agent.run`); la logica di generazione, validazione ed esecuzione SQL vive nel package `agent/`. Il loop di auto-correzione (fino a 3 tentativi, errore re-immesso nell'LLM) è dentro il tool `query_intel`.
 
 ### 3. Intelligence Layer (LangChain + Ollama)
 * **SQL Agent**: Translates natural language into **PostGIS-enabled PostgreSQL** queries. It identifies relevant tables (e.g., `fermate_metro`) and ensures geometric columns are included.
@@ -64,14 +64,12 @@ A specialized reconnaissance tool:
 ### Quick Start
 1.  **Install Dependencies**:
     ```bash
-    pip install fastapi uvicorn geopandas sqlalchemy langchain_ollama contextily pillow
+    pip install -r requirements.txt
     ```
-2.  **Environment Setup**: Configure your credentials in `agent.py`:
-    ```python
-    DB_USER = "postgres"
-    DB_PASS = "your_password"
-    DB_HOST = "192.168.1.48"
-    ```
+2.  **Environment Setup**: Configura le credenziali nel file `.env` (vedi `.env`).
+    L'agente è il package `agent/` (`agent.run`, `agent.analyze_satellite_image`),
+    con tool-calling (`query_intel`, `draw_geometry`), guardrail SQL read-only e
+    memoria conversazionale per `session_id`.
 3.  **Launch Server**:
     ```bash
     python server.py
