@@ -50,7 +50,20 @@
       "Bash(python -c \"import agent; print\\('import ok; graph tools:', [t.name for t in agent._graph_tools]\\)\")",
       "Bash(python -m pytest tests/ -q)",
       "Bash(git merge --no-ff feature/agent-geocoding -m ' *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(curl -s -m 2 http://localhost:11434/api/tags)",
+      "Bash(python -m pytest tests/test_geometry.py -q)",
+      "Bash(python -c \"import agent; print\\('graph tools:', [t.name for t in agent._graph_tools]\\)\")",
+      "Bash(git merge --no-ff feature/agent-real-geometry -m ' *)",
+      "Bash(python -m pytest tests/test_overpass.py -q)",
+      "Bash(git merge --no-ff feature/agent-overpass-streets -m ' *)",
+      "Bash(git merge --no-ff fix/overpass-rate-limit -m ' *)",
+      "Bash(git commit -m 'feat\\(agent\\): feature_collection_multi per piu'\\\\'' feature *)",
+      "Bash(git commit -m 'feat\\(agent\\): fetch_streets batch \\(1 query per piu'\\\\'' vie\\) + bbox_from_viewport *)",
+      "Bash(git commit -m 'feat\\(agent\\): tool trace_streets \\(piu'\\\\'' vie in una query Overpass\\) *)",
+      "Bash(git commit -m 'feat\\(agent\\): prompt - trace_streets per piu'\\\\'' vie in una chiamata *)",
+      "Bash(git commit -m 'docs\\(arch\\): trace_streets \\(batch vie\\) + throttle/retry Overpass *)",
+      "Bash(git merge --no-ff feature/agent-trace-streets -m ' *)"
     ]
   }
 }
