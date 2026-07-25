@@ -36,3 +36,13 @@ def test_system_prompt_mentions_new_tools():
     p = prompts.AGENT_SYSTEM_PROMPT
     assert "spatial_analysis" in p
     assert "request_clarification" in p
+    assert "geocode_place" in p
+
+
+def test_viewport_hint_present_and_absent():
+    assert prompts.viewport_hint(None) == ""
+    vp = {"lat": 45.46, "lon": 9.19, "north": 45.5, "south": 45.4, "east": 9.3, "west": 9.1}
+    hint = prompts.viewport_hint(vp)
+    assert "OPERATOR MAP VIEW" in hint
+    assert "45.46" in hint
+    assert "9.19" in hint
