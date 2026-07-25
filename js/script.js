@@ -57,6 +57,69 @@ map.on('move', () => {
     if(lngDisp) lngDisp.innerText = center.lng.toFixed(4);
 });
 
+let pendingAttachment = null;
+
+// --- SESSIONE: id stabile per la memoria conversazionale dell'agente ---
+function getSessionId() {
+    let id = localStorage.getItem('aegis_session_id');
+    if (!id) {
+        id = (window.crypto && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : 'sess-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        localStorage.setItem('aegis_session_id', id);
+    }
+    return id;
+}
+
+// --- Stato human-in-the-loop: true quando l'agente attende un chiarimento ---
+let awaitingClarification = false;
+
+function updateAttachmentBar() {
+    const attachmentBar = document.getElementById('attachment-bar');
+    const attachmentLabel = document.getElementById('attachment-label');
+
+    if (!attachmentBar || !attachmentLabel) return;
+
+    if (pendingAttachment) {
+        attachmentLabel.innerText = `ATTACHED IMAGE: ${pendingAttachment.name}`;
+        attachmentBar.classList.remove('hidden');
+        attachmentBar.classList.add('flex');
+    } else {
+        attachmentLabel.innerText = 'ATTACHED IMAGE READY';
+        attachmentBar.classList.add('hidden');
+        attachmentBar.classList.remove('flex');
+    }
+}
+
+function clearAttachment() {
+    pendingAttachment = null;
+    const imageInput = document.getElementById('image-input');
+    if (imageInput) imageInput.value = '';
+    updateAttachmentBar();
+}
+
+function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Unable to read image file.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+async function attachImageFile(file) {
+    if (!file || !file.type.startsWith('image/')) return;
+
+    const dataUrl = await fileToDataUrl(file);
+    pendingAttachment = {
+        name: file.name || 'screenshot.png',
+        dataUrl: dataUrl,
+        mimeType: file.type || 'image/png'
+    };
+
+    updateAttachmentBar();
+}
+
 // Gestione Preloader Globale (Pagina Intera)
 window.addEventListener('load', () => {
     const globalLoader = document.getElementById('global-loader');
@@ -104,21 +167,46 @@ async function sendMessage() {
     if (!inputField) return;
     
     const message = inputField.value.trim();
-    if (!message) return;
+    if (!message && !pendingAttachment) return;
+
+    const hasAttachment = Boolean(pendingAttachment);
+    const displayMessage = message || (hasAttachment ? `ANALYZE ATTACHED IMAGE: ${pendingAttachment.name}` : '');
 
     // A. Mostra messaggio Utente
-    addMessage(message, 'user');
+    addMessage(displayMessage, 'user');
     inputField.value = '';
     
+    if (hasAttachment) {
+        addMessage(`[IMAGE] ${pendingAttachment.name}`, 'user');
+    }
+
     // B. Mostra Loader nella chat
-    showChatLoader('text');
+    showChatLoader(hasAttachment ? 'optic' : 'text');
 
     try {
+        // Vista corrente della mappa: per "qui/quest'area" e per il bias del geocoding
+        const _center = map.getCenter();
+        const _bounds = map.getBounds();
+        const viewport = {
+            lat: _center.lat, lon: _center.lng,
+            north: _bounds.getNorth(), south: _bounds.getSouth(),
+            east: _bounds.getEast(), west: _bounds.getWest()
+        };
+
+        const payload = {
+            message: awaitingClarification ? '' : message,
+            image_data: pendingAttachment ? pendingAttachment.dataUrl : null,
+            image_name: pendingAttachment ? pendingAttachment.name : null,
+            session_id: getSessionId(),
+            resume: awaitingClarification ? message : null,
+            viewport: viewport
+        };
+
         // C. Chiamata API
         const response = await fetch('http://localhost:8000/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: message })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) throw new Error('Uplink failed');
@@ -126,9 +214,13 @@ async function sendMessage() {
 
         // D. Rimuovi Loader
         removeChatLoader();
+        clearAttachment();
 
         // E. Mostra Risposta AI
         addMessage(data.text, 'ai');
+
+        // E-bis. Aggiorna lo stato di attesa chiarimento (human-in-the-loop)
+        awaitingClarification = Boolean(data.awaiting_input);
 
         // F. Disegna Dati su Mappa se presenti
         if (data.geojson) {
@@ -174,6 +266,12 @@ async function performScan() {
 }
 
 // Funzione helper per aggiungere messaggi HTML alla chat
+// --- Markdown rendering (markdown-it) + sanitizzazione (DOMPurify) ---
+const md = window.markdownit({ breaks: true, linkify: true });
+function renderMarkdown(text) {
+    return DOMPurify.sanitize(md.render(text || ''));
+}
+
 function addMessage(text, sender) {
     const history = document.getElementById('chat-history');
     if (!history) return;
@@ -186,10 +284,10 @@ function addMessage(text, sender) {
         div.innerText = `> ${text}`;
     } else if (sender === 'ai-vision') {
         div.classList.add('msg-ai', 'mr-8', 'border-l-2', 'border-amber-400');
-        div.innerHTML = `<strong class="text-amber-400 font-mono text-xs">[VISION_AI]</strong><br>${text}`;
+        div.innerHTML = `<strong class="text-amber-400 font-mono text-xs">[VISION_AI]</strong><br><div class="md">${renderMarkdown(text)}</div>`;
     } else {
         div.classList.add('msg-ai', 'mr-8');
-        div.innerHTML = `<strong class="text-amber-500 font-mono text-xs">[OP_INTEL]</strong><br>${text}`;
+        div.innerHTML = `<strong class="text-amber-500 font-mono text-xs">[OP_INTEL]</strong><br><div class="md">${renderMarkdown(text)}</div>`;
     }
     
     history.appendChild(div);
@@ -260,4 +358,44 @@ function drawMapData(geojsonData) {
 // Gestione Invio con tasto Enter
 document.getElementById('user-input')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
+});
+
+document.getElementById('attach-image-btn')?.addEventListener('click', () => {
+    document.getElementById('image-input')?.click();
+});
+
+document.getElementById('image-input')?.addEventListener('change', async (event) => {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    try {
+        await attachImageFile(file);
+    } catch (error) {
+        console.error('Attachment error:', error);
+        addMessage('ATTACHMENT_ERROR: Impossibile leggere lo screenshot.', 'ai');
+    }
+});
+
+document.getElementById('clear-attachment-btn')?.addEventListener('click', () => {
+    clearAttachment();
+});
+
+document.getElementById('user-input')?.addEventListener('paste', async (event) => {
+    const items = event.clipboardData?.items || [];
+    const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith('image/'));
+
+    if (!imageItem) return;
+
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    event.preventDefault();
+
+    try {
+        await attachImageFile(file);
+        addMessage(`SCREENSHOT PASTED: ${file.name || 'clipboard-image'}`, 'user');
+    } catch (error) {
+        console.error('Paste attachment error:', error);
+        addMessage('ATTACHMENT_ERROR: Impossibile importare l\'immagine dagli appunti.', 'ai');
+    }
 });

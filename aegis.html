@@ -38,13 +38,24 @@
             </div>
 
             <div class="mt-auto space-y-4">
-                <div class="bg-white/5 border border-white/10 p-1 flex shadow-inner">
+                <div class="bg-white/5 border border-white/10 p-1 flex shadow-inner gap-1">
+                    <button type="button" id="attach-image-btn" class="shrink-0 bg-white/5 hover:bg-white/10 text-amber-400 border border-amber-500/30 px-3 py-2 font-['Chakra_Petch'] text-xs tracking-widest transition-colors">
+                        ATTACH
+                    </button>
+                    <input type="file" id="image-input" accept="image/*" class="hidden">
                     <input type="text" id="user-input" 
                            class="w-full bg-transparent text-white p-2 focus:outline-none font-mono text-sm placeholder-gray-700" 
-                           placeholder="ENTER COMMAND..." 
+                           placeholder="ENTER COMMAND OR PASTE SCREENSHOT..." 
                            autocomplete="off">
                     <button onclick="sendMessage()" class="bg-amber-600 hover:bg-amber-500 text-black font-bold px-4 py-2 font-['Chakra_Petch'] transition-colors">
                         EXECUTE
+                    </button>
+                </div>
+
+                <div id="attachment-bar" class="hidden items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/20 px-3 py-2 text-[10px] font-mono text-amber-300">
+                    <span id="attachment-label" class="truncate">ATTACHED IMAGE READY</span>
+                    <button type="button" id="clear-attachment-btn" class="text-white/60 hover:text-white uppercase tracking-widest">
+                        CLEAR
                     </button>
                 </div>
 
@@ -85,6 +96,8 @@
             btn.classList.toggle('active');
         }
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14/dist/markdown-it.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <script src="js/script.js"></script>
 </body>
 </html>

@@ -281,6 +281,57 @@ html, body {
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* --- Markdown reso nei messaggi AI (markdown-it) --- */
+.msg-ai .md { line-height: 1.5; }
+.msg-ai .md p { margin: 0 0 0.5em; }
+.msg-ai .md p:last-child { margin-bottom: 0; }
+.msg-ai .md ul,
+.msg-ai .md ol { margin: 0.25em 0 0.5em; padding-left: 1.25em; }
+.msg-ai .md ul { list-style: disc; }
+.msg-ai .md ol { list-style: decimal; }
+.msg-ai .md li { margin: 0.15em 0; }
+.msg-ai .md strong { color: var(--amber); font-weight: 700; }
+.msg-ai .md em { font-style: italic; opacity: 0.9; }
+.msg-ai .md h1,
+.msg-ai .md h2,
+.msg-ai .md h3,
+.msg-ai .md h4 {
+    color: var(--amber);
+    font-weight: 700;
+    margin: 0.4em 0 0.3em;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+.msg-ai .md h1 { font-size: 1.05em; }
+.msg-ai .md h2 { font-size: 1em; }
+.msg-ai .md h3,
+.msg-ai .md h4 { font-size: 0.95em; }
+.msg-ai .md code {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    padding: 0 0.25em;
+    border-radius: 2px;
+    font-family: 'VT323', monospace;
+}
+.msg-ai .md pre {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 0.5em;
+    overflow-x: auto;
+    margin: 0.4em 0;
+}
+.msg-ai .md pre code { background: none; border: none; padding: 0; }
+.msg-ai .md a { color: var(--amber); text-decoration: underline; }
+.msg-ai .md blockquote {
+    border-left: 2px solid rgba(245, 158, 11, 0.5);
+    padding-left: 0.6em;
+    margin: 0.4em 0;
+    opacity: 0.85;
+}
+.msg-ai .md table { border-collapse: collapse; margin: 0.4em 0; }
+.msg-ai .md th,
+.msg-ai .md td { border: 1px solid rgba(255, 255, 255, 0.15); padding: 0.2em 0.5em; }
+
 /* --- 8. POPUP TATTICI LEAFLET --- */
 .leaflet-pane.leaflet-popup-pane {
     z-index: 700 !important;
