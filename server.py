@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
     image_data: str | None = None
     image_name: str | None = None
     session_id: str | None = None
+    resume: str | None = None
 
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
@@ -106,10 +107,11 @@ async def chat_endpoint(request: ChatRequest):
             session_id=session_id,
             image=image_bytes,
             mime_type=mime_type,
+            resume=request.resume,
         )
     except Exception as e:
         print(f"Chat Error: {e}")
-        return {"text": f"SYSTEM_FAILURE: {e}", "geojson": None}
+        return {"text": f"SYSTEM_FAILURE: {e}", "geojson": None, "awaiting_input": False}
 
 @app.post("/api/scan")
 async def scan_endpoint(request: ScanRequest):
