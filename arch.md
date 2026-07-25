@@ -38,7 +38,8 @@ Ogni modulo ha una responsabilità singola e un'interfaccia netta; le funzioni p
 | `db.py` | `engine`, `SQLDatabase`, `table_info` e **`execute_readonly`** (esecuzione in transazione a sola lettura). |
 | `llm.py` | Factory dei due modelli Ollama (testo con `temperature=0`, vision). |
 | `safety.py` | Guardrail SQL: `extract_sql` (parsing) + `validate_readonly_sql` (validazione statica). |
-| `geocode.py` | Geocoding via Nominatim/OSM (`geocode`, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
+| `geocode.py` | Geocoding via Nominatim/OSM diretto (`geocode` → nome/lat/lon/**geometria reale**, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
+| `geometry.py` | Helper geometrie: `feature_collection` (wrap GeoJSON) + `buffer_geometry` (buffer metrico in UTM). |
 | `prompts.py` | Tutti i prompt spezzati: system dell'agente, template SQL / geometry / spatial, grounding, vision, briefing. Schema **iniettato** da `Config.SCHEMA`. |
 | `tools.py` | `run_sql_pipeline` (condivisa) + `make_graph_tools` (i tool del grafo) + `request_clarification` + `make_tools` (legacy fallback). |
 | `graph.py` | Il **`StateGraph`**: stato, nodi (`agent`/`tools`/`clarify`/`ground`), routing. |
@@ -96,8 +97,9 @@ Ogni tool è un `@tool` LangChain (per il binding/schema) ma ritorna un **dict**
 |---|---|
 | `query_intel(request)` | **Database Intelligence**: NL→SQL su `schema1` (trova/elenca/conta fermate, parchi, ospedali). |
 | `spatial_analysis(request)` | **Analisi spaziale derivata**: distanza, nearest (`<->`), `ST_DWithin`, `ST_Intersects`. |
-| `geocode_place(place)` | **Geocoding**: risolve un nome (piazza/via/monumento) in coordinate reali via Nominatim/OSM. Va chiamato **prima** di `draw_geometry` per un luogo con nome. |
-| `draw_geometry(request)` | **Tactical Geometry**: costruisce geometrie PostGIS (zona, perimetro, rotta, buffer) **dalle coordinate** ricevute — non le indovina. Non tocca il DB. |
+| `locate_place(place)` | **Geometria reale**: traccia una via/piazza/POI usando la sua geometria OSM reale (LineString/Polygon/Point). Per *"traccia/contorno/segna X"*. |
+| `buffer_around(place, radius_m)` | **Buffer sul luogo reale**: buffer (default 500 m) attorno alla geometria reale di un luogo. Per *"area/raggio attorno a X"*. |
+| `draw_geometry(request)` | **Tactical Geometry sintetica**: costruisce geometrie PostGIS da **coordinate esplicite** (corridoio tra coord, poligono con vertici dati). Non geocodifica, non tocca il DB. |
 | `request_clarification(question)` | **Sentinella** human-in-the-loop: la sua chiamata instrada verso il nodo `clarify` (non esegue nulla). |
 
 I tre tool SQL condividono `run_sql_pipeline`, il cui ciclo è:
@@ -112,10 +114,12 @@ genera SQL  →  extract_sql  →  validate_readonly_sql  →  execute_readonly
 
 ### Geolocalizzazione: geocoder + viewport
 
-Per evitare che l'LLM **indovini** le coordinate (causa di geometrie fuori posto), la localizzazione passa da due meccanismi:
+Per evitare che l'LLM **indovini** le coordinate/forme (causa di geometrie fuori posto), i luoghi con nome usano la **geometria reale** di OSM:
 
-- **`geocode_place`** (`agent/geocode.py`, Nominatim/OSM via geopy) risolve *nome → coordinate reali*. L'agente concatena `geocode_place("Prato della Valle") → draw_geometry(...)`: le coordinate arrivano in una `ToolMessage` e il modello le **ricopia** (trascrizione affidabile, non memoria). Su fallimento → `request_clarification`.
-- **Viewport della mappa** — il frontend manda `viewport` (centro + bounds); entra in `AgentState` e viene iniettato nel system prompt (`OPERATOR MAP VIEW`) → per *"attorno a qui"* il modello usa il **centro mappa**. Il viewport **biasa** anche il geocoding (viewbox di Nominatim) via un `ContextVar` (`current_viewport`), impostato da `run()` — così si evita `InjectedState` (in `langgraph.prebuilt`, incompatibile). Raggio di default: 500 m.
+- **`agent/geocode.py`** interroga Nominatim direttamente (`polygon_geojson=1`) e ritorna `{name, lat, lon, geometry}` — la **geometria reale** (la LineString della via, il Polygon della piazza; fallback Point). HTTP iniettabile → test offline.
+- **`locate_place`** rende quella geometria direttamente sulla mappa (per *"traccia X"*); **`buffer_around`** ne calcola il **buffer metrico** (`agent/geometry.py`, riproiezione in **UTM** con geopandas/shapely) per *"area attorno a X"*. Così l'LLM non ricostruisce più la forma.
+- **Viewport della mappa** — il frontend manda `viewport` (centro + bounds); entra in `AgentState`, iniettato nel system prompt (`OPERATOR MAP VIEW`) per *"attorno a qui"*, e **biasa** il geocoding (viewbox Nominatim) via il `ContextVar` `current_viewport` impostato da `run()` — evitando `InjectedState` (in `langgraph.prebuilt`, incompatibile).
+- Geocoding fallito → `request_clarification` (niente coordinate inventate).
 
 ---
 
