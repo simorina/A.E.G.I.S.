@@ -40,7 +40,7 @@ Ogni modulo ha una responsabilità singola e un'interfaccia netta; le funzioni p
 | `safety.py` | Guardrail SQL: `extract_sql` (parsing) + `validate_readonly_sql` (validazione statica). |
 | `geocode.py` | Geocoding via Nominatim/OSM diretto (`geocode` → nome/lat/lon/**geometria reale**, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
 | `geometry.py` | Helper geometrie: `feature_collection` (wrap GeoJSON) + `buffer_geometry` (buffer metrico in UTM). |
-| `overpass.py` | `fetch_street` (via intera da Overpass) + `resolve_place` (ibrido Nominatim+Overpass: Overpass solo per le strade). |
+| `overpass.py` | `fetch_street` (via intera) + `fetch_streets` (batch, 1 query) + `resolve_place` (ibrido Nominatim+Overpass). Throttle ~1/s + retry contro il rate-limit. |
 | `prompts.py` | Tutti i prompt spezzati: system dell'agente, template SQL / geometry / spatial, grounding, vision, briefing. Schema **iniettato** da `Config.SCHEMA`. |
 | `tools.py` | `run_sql_pipeline` (condivisa) + `make_graph_tools` (i tool del grafo) + `request_clarification` + `make_tools` (legacy fallback). |
 | `graph.py` | Il **`StateGraph`**: stato, nodi (`agent`/`tools`/`clarify`/`ground`), routing. |
@@ -100,6 +100,7 @@ Ogni tool è un `@tool` LangChain (per il binding/schema) ma ritorna un **dict**
 | `spatial_analysis(request)` | **Analisi spaziale derivata**: distanza, nearest (`<->`), `ST_DWithin`, `ST_Intersects`. |
 | `locate_place(place)` | **Geometria reale**: traccia una via/piazza/POI usando la sua geometria OSM reale (LineString/Polygon/Point). Per *"traccia/contorno/segna X"*. |
 | `buffer_around(place, radius_m)` | **Buffer sul luogo reale**: buffer (default 500 m) attorno alla geometria reale di un luogo. Per *"area/raggio attorno a X"*. |
+| `trace_streets(places)` | **Batch vie**: traccia PIÙ vie in **una sola query** Overpass (niente rate-limit). Per *"le 5 vie principali di X"*. Usa la vista mappa. |
 | `draw_geometry(request)` | **Tactical Geometry sintetica**: costruisce geometrie PostGIS da **coordinate esplicite** (corridoio tra coord, poligono con vertici dati). Non geocodifica, non tocca il DB. |
 | `request_clarification(question)` | **Sentinella** human-in-the-loop: la sua chiamata instrada verso il nodo `clarify` (non esegue nulla). |
 

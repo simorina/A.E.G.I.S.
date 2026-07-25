@@ -1,4 +1,4 @@
-from agent.overpass import fetch_street, resolve_place
+from agent.overpass import fetch_street, fetch_streets, resolve_place, bbox_from_viewport
 
 
 class FakeHttpPost:
@@ -80,6 +80,37 @@ def test_fetch_street_gives_up_after_retries():
 
     assert fetch_street("Via X", (0, 0, 1, 1), http_post=always_fail, sleep=_noop) is None
     assert calls["n"] == 3  # 1 tentativo + 2 retry
+
+
+# --- fetch_streets (batch) ---
+
+OVERPASS_NAMED = {"elements": [
+    {"type": "way", "tags": {"name": "Via A"}, "geometry": [{"lat": 1, "lon": 2}, {"lat": 3, "lon": 4}]},
+    {"type": "way", "tags": {"name": "Via A"}, "geometry": [{"lat": 3, "lon": 4}, {"lat": 5, "lon": 6}]},
+    {"type": "way", "tags": {"name": "Via B"}, "geometry": [{"lat": 7, "lon": 8}, {"lat": 9, "lon": 10}]},
+]}
+
+
+def test_fetch_streets_groups_by_name_in_single_query():
+    http = FakeHttpPost(result=OVERPASS_NAMED)
+    out = fetch_streets(["Via A", "Via B"], (45.4, 9.1, 45.5, 9.2), http_post=http, sleep=_noop)
+    assert set(out) == {"Via A", "Via B"}
+    assert out["Via A"]["type"] == "MultiLineString"
+    assert len(out["Via A"]["coordinates"]) == 2  # due tratti di Via A
+    assert len(out["Via B"]["coordinates"]) == 1
+    q = http.last["data"]["data"]
+    assert 'name"="Via A"' in q and 'name"="Via B"' in q  # UNA sola query con entrambe
+
+
+def test_fetch_streets_empty_returns_empty_dict():
+    out = fetch_streets(["X"], (0, 0, 1, 1), http_post=FakeHttpPost(result={"elements": []}), sleep=_noop)
+    assert out == {}
+
+
+def test_bbox_from_viewport():
+    vp = {"lat": 45.46, "lon": 9.19, "north": 45.5, "south": 45.4, "east": 9.3, "west": 9.1}
+    assert bbox_from_viewport(vp) == (45.4, 9.1, 45.5, 9.3)  # (s,w,n,e)
+    assert bbox_from_viewport(None) is None
 
 
 # --- resolve_place ---
