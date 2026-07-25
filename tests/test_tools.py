@@ -103,7 +103,33 @@ def test_make_graph_tools_names_and_dict_return():
         execute_sql=lambda sql: FakeGDF(),
         schema="schema1",
     )}
-    assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis"}
+    assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis", "geocode_place"}
     out = tools["spatial_analysis"].invoke({"request": "nearest"})
     assert out["geojson"] is not None
     assert "Duomo" in out["summary"]
+
+
+def _graph_tools(geocode_fn):
+    return {t.name: t for t in make_graph_tools(
+        generate_query_sql=lambda request, error: "SELECT 1 AS geom",
+        generate_geometry_sql=lambda request, error: "SELECT 1 AS geom",
+        generate_spatial_sql=lambda request, error: "SELECT 1 AS geom",
+        execute_sql=lambda sql: FakeGDF(),
+        schema="schema1",
+        geocode_fn=geocode_fn,
+    )}
+
+
+def test_geocode_place_success():
+    tools = _graph_tools(lambda place, viewbox=None: {"name": "Prato della Valle", "lat": 45.398, "lon": 11.877})
+    out = tools["geocode_place"].invoke({"place": "Prato della Valle"})
+    assert "GEOCODED" in out["summary"]
+    assert "45.398" in out["summary"] and "11.877" in out["summary"]
+    assert out["geojson"] is None
+
+
+def test_geocode_place_failure():
+    tools = _graph_tools(lambda place, viewbox=None: None)
+    out = tools["geocode_place"].invoke({"place": "nessun luogo"})
+    assert "GEOCODE_FAILED" in out["summary"]
+    assert out["geojson"] is None

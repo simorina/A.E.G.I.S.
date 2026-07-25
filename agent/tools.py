@@ -3,6 +3,7 @@ import logging
 from langchain_core.tools import tool
 
 from .safety import extract_sql, validate_readonly_sql, UnsafeQueryError
+from .geocode import geocode, current_viewport, viewbox_from_viewport
 
 log = logging.getLogger(__name__)
 
@@ -44,8 +45,9 @@ def run_sql_pipeline(generate, request, *, execute_sql, schema, max_attempts=3, 
 
 
 def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spatial_sql,
-                     execute_sql, schema, max_attempts=3):
+                     execute_sql, schema, geocode_fn=None, max_attempts=3):
     """Tool per il grafo LangGraph: ognuno ritorna {'summary','geojson'}."""
+    _geocode = geocode_fn or geocode
 
     @tool
     def query_intel(request: str) -> dict:
@@ -71,7 +73,19 @@ def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spat
                                 execute_sql=execute_sql, schema=schema, max_attempts=max_attempts,
                                 label="spatial_analysis")
 
-    return [query_intel, draw_geometry, spatial_analysis]
+    @tool
+    def geocode_place(place: str) -> dict:
+        """Resolve a NAMED place (square, street, monument, address) to real WGS84
+        coordinates. ALWAYS call this before draw_geometry for a named location, then pass
+        the returned lat/lon to draw_geometry. Do NOT guess coordinates."""
+        result = _geocode(place, viewbox=viewbox_from_viewport(current_viewport.get()))
+        if result is None:
+            return {"summary": f"GEOCODE_FAILED: '{place}' non trovato. "
+                               f"Chiedi conferma delle coordinate all'operatore.", "geojson": None}
+        return {"summary": f"GEOCODED: {result['name']} -> "
+                          f"lat={result['lat']}, lon={result['lon']}", "geojson": None}
+
+    return [query_intel, draw_geometry, spatial_analysis, geocode_place]
 
 
 def make_tools(*, generate_query_sql, generate_geometry_sql, execute_sql,
