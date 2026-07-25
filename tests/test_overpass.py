@@ -27,28 +27,59 @@ MLS = {"type": "MultiLineString", "coordinates": [
 
 # --- fetch_street ---
 
+def _noop(_):
+    pass
+
+
 def test_fetch_street_merges_ways_into_multilinestring():
     g = fetch_street("Via Monte Napoleone", (45.45, 9.16, 45.49, 9.22),
-                     http_post=FakeHttpPost(result=OVERPASS_WAYS))
+                     http_post=FakeHttpPost(result=OVERPASS_WAYS), sleep=_noop)
     assert g["type"] == "MultiLineString"
     assert len(g["coordinates"]) == 2
     assert g["coordinates"][0][0] == [9.195, 45.468]  # [lon, lat]
 
 
 def test_fetch_street_empty_returns_none():
-    assert fetch_street("x", (0, 0, 1, 1), http_post=FakeHttpPost(result={"elements": []})) is None
+    assert fetch_street("x", (0, 0, 1, 1),
+                        http_post=FakeHttpPost(result={"elements": []}), sleep=_noop) is None
 
 
 def test_fetch_street_exception_returns_none():
-    assert fetch_street("x", (0, 0, 1, 1), http_post=FakeHttpPost(raises=RuntimeError("rate"))) is None
+    assert fetch_street("x", (0, 0, 1, 1),
+                        http_post=FakeHttpPost(raises=RuntimeError("rate")), sleep=_noop) is None
 
 
 def test_fetch_street_query_contains_name_and_bbox():
     http = FakeHttpPost(result=OVERPASS_WAYS)
-    fetch_street("Via X", (45.4, 9.1, 45.5, 9.2), http_post=http)
+    fetch_street("Via X", (45.4, 9.1, 45.5, 9.2), http_post=http, sleep=_noop)
     q = http.last["data"]["data"]
     assert 'name"="Via X"' in q
     assert "45.4,9.1,45.5,9.2" in q
+
+
+def test_fetch_street_retries_on_error_then_succeeds():
+    calls = {"n": 0}
+
+    def flaky(url, data, headers, timeout):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("429 rate limited")
+        return OVERPASS_WAYS
+
+    g = fetch_street("Via X", (0, 0, 1, 1), http_post=flaky, sleep=_noop)
+    assert g["type"] == "MultiLineString"
+    assert calls["n"] == 2  # ha ritentato dopo il primo errore
+
+
+def test_fetch_street_gives_up_after_retries():
+    calls = {"n": 0}
+
+    def always_fail(url, data, headers, timeout):
+        calls["n"] += 1
+        raise RuntimeError("429")
+
+    assert fetch_street("Via X", (0, 0, 1, 1), http_post=always_fail, sleep=_noop) is None
+    assert calls["n"] == 3  # 1 tentativo + 2 retry
 
 
 # --- resolve_place ---
