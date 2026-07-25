@@ -4,15 +4,21 @@ import logging
 from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
+from langchain_core.messages import HumanMessage
 
 from .config import load_config
 from .db import make_engine, make_sql_database, get_table_info, execute_readonly
+from .geojson import RESET_GEOJSON
 from .llm import build_text_llm, build_vision_llm
-from .prompts import sql_query_template, GEOMETRY_TEMPLATE, BRIEFING_TEMPLATE
+from .prompts import (sql_query_template, GEOMETRY_TEMPLATE, BRIEFING_TEMPLATE,
+                      spatial_query_template, GROUNDING_TEMPLATE)
 from .memory import ConversationMemory
-from .tools import make_tools
+from .tools import make_tools, make_graph_tools, request_clarification
 from .vision import analyze_satellite_image
 from .orchestrator import Orchestrator, keyword_router
+from .graph import build_graph
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("agent")
@@ -73,6 +79,34 @@ def _build_tools(ctx):
     )
 
 
+_spatial_chain = (ChatPromptTemplate.from_template(spatial_query_template(config.schema))
+                  | text_llm | StrOutputParser())
+_grounding_chain = (ChatPromptTemplate.from_template(GROUNDING_TEMPLATE)
+                    | text_llm | StrOutputParser())
+
+
+def _generate_spatial_sql(request, error=""):
+    return _spatial_chain.invoke({"table_info": _table_info, "question": request, "error": error})
+
+
+def _ground(draft, data):
+    if not data.strip():
+        return draft
+    return _grounding_chain.invoke({"draft": draft, "data": data})
+
+
+_graph_tools = make_graph_tools(
+    generate_query_sql=_generate_query_sql,
+    generate_geometry_sql=_generate_geometry_sql,
+    generate_spatial_sql=_generate_spatial_sql,
+    execute_sql=_execute_sql,
+    schema=config.schema,
+) + [request_clarification]
+
+_graph = build_graph(llm=text_llm, tools=_graph_tools, ground_fn=_ground,
+                     checkpointer=MemorySaver())
+
+
 _orchestrator = Orchestrator(
     llm=text_llm,
     build_tools=_build_tools,
@@ -84,10 +118,34 @@ _orchestrator = Orchestrator(
 )
 
 
-def run(message, session_id, image=None, mime_type="image/jpeg"):
+def run(message, session_id, image=None, mime_type="image/jpeg", resume=None):
     if engine is None and image is None:
-        return {"text": "Tactical engine offline.", "geojson": None}
-    return _orchestrator.run(message, session_id, image, mime_type)
+        return {"text": "Tactical engine offline.", "geojson": None, "awaiting_input": False}
+
+    # Fallback per modelli senza tool-calling nativo.
+    if not config.tool_calling:
+        out = _orchestrator.run(message, session_id, image, mime_type)
+        return {**out, "awaiting_input": False}
+
+    if image is not None:
+        text = _analyze_image(image, message or "", mime_type)
+        return {"text": text, "geojson": None, "awaiting_input": False}
+
+    cfg = {"configurable": {"thread_id": session_id}, "recursion_limit": config.recursion_limit}
+
+    if resume is not None:
+        inp = Command(resume=resume)
+    else:
+        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id, "geojson": RESET_GEOJSON}
+
+    result = _graph.invoke(inp, cfg)
+
+    if result.get("__interrupt__"):
+        question = result["__interrupt__"][0].value.get("question", "Chiarimento richiesto.")
+        return {"text": question, "geojson": None, "awaiting_input": True}
+
+    final = result["messages"][-1].content
+    return {"text": final, "geojson": result.get("geojson"), "awaiting_input": False}
 
 
 __all__ = ["engine", "vision_llm", "config", "run", "analyze_satellite_image"]

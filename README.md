@@ -23,6 +23,7 @@ The robust Python server (`server.py`) acts as the mission control:
 ### 3. Intelligence Layer (LangChain + Ollama)
 * **SQL Agent**: Translates natural language into **PostGIS-enabled PostgreSQL** queries. It identifies relevant tables (e.g., `fermate_metro`) and ensures geometric columns are included.
 * **Vision Agent**: Captures map areas, processes them through the **Pillow** library, and utilizes **Ollama Vision Models** (like Moondream or LLaVA) to provide real-time terrain descriptions.
+* **LangGraph Agent**: l'orchestrazione è un `StateGraph` (nodi `agent`/`tools`/`clarify`/`ground`) con ragionamento multi-step (ReAct), analisi spaziale (`spatial_analysis`), chiarimento human-in-the-loop (`interrupt`) e grounding del briefing. Checkpointer in-memory per `session_id`.
 
 ### 4. Data Layer (PostGIS)
 * A specialized **PostgreSQL** instance with the **PostGIS** extension to handle complex spatial relationships, coordinates, and geometry data types.
