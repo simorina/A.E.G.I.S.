@@ -22,6 +22,7 @@ class Config:
     memory_turns: int
     top_k: int
     tool_calling: bool
+    recursion_limit: int
 
 
 def load_config(env: Optional[Mapping[str, str]] = None) -> Config:
@@ -52,4 +53,5 @@ def load_config(env: Optional[Mapping[str, str]] = None) -> Config:
         memory_turns=int(env.get("MEMORY_TURNS", "6")),
         top_k=int(env.get("TOP_K", "100")),
         tool_calling=env.get("AGENT_TOOL_CALLING", "on").strip().lower() != "off",
+        recursion_limit=int(env.get("RECURSION_LIMIT", "12")),
     )
