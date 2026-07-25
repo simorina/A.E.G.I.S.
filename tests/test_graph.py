@@ -21,9 +21,11 @@ class ScriptedLLM:
     def __init__(self, scripted):
         self._scripted = scripted
         self._i = 0
+        self.seen_messages = None
     def bind_tools(self, tools):
         return self
     def invoke(self, messages):
+        self.seen_messages = messages
         ai = self._scripted[self._i]
         self._i += 1
         return ai
@@ -86,3 +88,15 @@ def test_geojson_resets_between_turns():
     assert r1["geojson"] == FC1  # turno 1 produce la feature
     r2 = graph.invoke({"messages": [("user", "turn2")], "geojson": RESET_GEOJSON, "session_id": "reset1"}, cfg)
     assert r2["geojson"] is None  # turno 2 NON riemette la feature del turno 1
+
+
+def test_viewport_reaches_system_prompt():
+    llm = ScriptedLLM([AIMessage(content="done")])
+    graph = build_graph(llm=llm, tools=[fake_query], ground_fn=lambda d, data: d,
+                        checkpointer=MemorySaver())
+    vp = {"lat": 45.46, "lon": 9.19, "north": 45.5, "south": 45.4, "east": 9.3, "west": 9.1}
+    graph.invoke({"messages": [("user", "draw here")], "geojson": None,
+                  "session_id": "vp1", "viewport": vp}, _cfg("vp1"))
+    system = llm.seen_messages[0]
+    assert "OPERATOR MAP VIEW" in system.content
+    assert "45.46" in system.content

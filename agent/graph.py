@@ -5,7 +5,7 @@ from langgraph.graph.message import add_messages
 from langgraph.types import interrupt
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 
-from .prompts import AGENT_SYSTEM_PROMPT
+from .prompts import AGENT_SYSTEM_PROMPT, viewport_hint
 from .geojson import merge_geojson, geojson_reducer
 
 CLARIFY_TOOL_NAME = "request_clarification"
@@ -15,6 +15,7 @@ class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
     geojson: Annotated[Optional[str], geojson_reducer]
     session_id: str
+    viewport: Optional[dict]
 
 
 def build_graph(*, llm, tools, ground_fn, checkpointer):
@@ -22,7 +23,8 @@ def build_graph(*, llm, tools, ground_fn, checkpointer):
 
     def agent_node(state: AgentState):
         bound = llm.bind_tools(tools)
-        ai = bound.invoke([SystemMessage(content=AGENT_SYSTEM_PROMPT)] + state["messages"])
+        system = AGENT_SYSTEM_PROMPT + viewport_hint(state.get("viewport"))
+        ai = bound.invoke([SystemMessage(content=system)] + state["messages"])
         return {"messages": [ai]}
 
     def tools_node(state: AgentState):
