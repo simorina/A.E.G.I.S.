@@ -16,6 +16,18 @@ def feature_collection(geometry: dict, label: str) -> str:
     })
 
 
+def feature_collection_multi(pairs) -> str:
+    """Incapsula più geometrie in una FeatureCollection (stringa).
+    `pairs` = iterabile di (geometry_dict, label)."""
+    return json.dumps({
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"label": label}, "geometry": geometry}
+            for geometry, label in pairs
+        ],
+    })
+
+
 def buffer_geometry(geometry: dict, radius_m: float) -> str:
     """Buffer metrico accurato attorno a una geometria GeoJSON (WGS84).
     Riproietta in UTM per avere metri corretti, poi torna in 4326.
