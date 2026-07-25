@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage
 from .config import load_config
 from .db import make_engine, make_sql_database, get_table_info, execute_readonly
 from .geojson import RESET_GEOJSON
+from .geocode import geocode, current_viewport
 from .llm import build_text_llm, build_vision_llm
 from .prompts import (sql_query_template, GEOMETRY_TEMPLATE, BRIEFING_TEMPLATE,
                       spatial_query_template, GROUNDING_TEMPLATE)
@@ -101,6 +102,7 @@ _graph_tools = make_graph_tools(
     generate_spatial_sql=_generate_spatial_sql,
     execute_sql=_execute_sql,
     schema=config.schema,
+    geocode_fn=geocode,
 ) + [request_clarification]
 
 _graph = build_graph(llm=text_llm, tools=_graph_tools, ground_fn=_ground,
@@ -118,7 +120,7 @@ _orchestrator = Orchestrator(
 )
 
 
-def run(message, session_id, image=None, mime_type="image/jpeg", resume=None):
+def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, viewport=None):
     if engine is None and image is None:
         return {"text": "Tactical engine offline.", "geojson": None, "awaiting_input": False}
 
@@ -136,9 +138,15 @@ def run(message, session_id, image=None, mime_type="image/jpeg", resume=None):
     if resume is not None:
         inp = Command(resume=resume)
     else:
-        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id, "geojson": RESET_GEOJSON}
+        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id,
+               "geojson": RESET_GEOJSON, "viewport": viewport}
 
-    result = _graph.invoke(inp, cfg)
+    # La vista corrente è disponibile ai tool (geocode_place) per il turno.
+    token = current_viewport.set(viewport)
+    try:
+        result = _graph.invoke(inp, cfg)
+    finally:
+        current_viewport.reset(token)
 
     if result.get("__interrupt__"):
         question = result["__interrupt__"][0].value.get("question", "Chiarimento richiesto.")
