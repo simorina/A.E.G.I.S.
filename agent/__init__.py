@@ -11,7 +11,8 @@ from langchain_core.messages import HumanMessage
 from .config import load_config
 from .db import make_engine, make_sql_database, get_table_info, execute_readonly
 from .geojson import RESET_GEOJSON
-from .geocode import geocode, current_viewport
+from .geocode import current_viewport
+from .overpass import resolve_place
 from .llm import build_text_llm, build_vision_llm
 from .prompts import (sql_query_template, GEOMETRY_TEMPLATE, BRIEFING_TEMPLATE,
                       spatial_query_template, GROUNDING_TEMPLATE)
@@ -102,7 +103,7 @@ _graph_tools = make_graph_tools(
     generate_spatial_sql=_generate_spatial_sql,
     execute_sql=_execute_sql,
     schema=config.schema,
-    geocode_fn=geocode,
+    geocode_fn=resolve_place,
 ) + [request_clarification]
 
 _graph = build_graph(llm=text_llm, tools=_graph_tools, ground_fn=_ground,
