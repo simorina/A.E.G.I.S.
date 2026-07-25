@@ -103,7 +103,8 @@ def test_make_graph_tools_names_and_dict_return():
         execute_sql=lambda sql: FakeGDF(),
         schema="schema1",
     )}
-    assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis", "geocode_place"}
+    assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis",
+                          "locate_place", "buffer_around"}
     out = tools["spatial_analysis"].invoke({"request": "nearest"})
     assert out["geojson"] is not None
     assert "Duomo" in out["summary"]
@@ -120,16 +121,32 @@ def _graph_tools(geocode_fn):
     )}
 
 
-def test_geocode_place_success():
-    tools = _graph_tools(lambda place, viewbox=None: {"name": "Prato della Valle", "lat": 45.398, "lon": 11.877})
-    out = tools["geocode_place"].invoke({"place": "Prato della Valle"})
-    assert "GEOCODED" in out["summary"]
-    assert "45.398" in out["summary"] and "11.877" in out["summary"]
-    assert out["geojson"] is None
+_LINE = {"type": "LineString", "coordinates": [[9.195, 45.468], [9.197, 45.466]]}
+_POINT = {"type": "Point", "coordinates": [11.877, 45.398]}
 
 
-def test_geocode_place_failure():
+def test_locate_place_returns_real_geometry():
+    import json
+    tools = _graph_tools(lambda place, viewbox=None: {
+        "name": "Via Monte Napoleone", "lat": 45.467, "lon": 9.196, "geometry": _LINE})
+    out = tools["locate_place"].invoke({"place": "Via Monte Napoleone"})
+    assert "LOCATED" in out["summary"]
+    fc = json.loads(out["geojson"])
+    assert fc["features"][0]["geometry"] == _LINE
+
+
+def test_buffer_around_returns_polygon():
+    import json
+    tools = _graph_tools(lambda place, viewbox=None: {
+        "name": "Prato della Valle", "lat": 45.398, "lon": 11.877, "geometry": _POINT})
+    out = tools["buffer_around"].invoke({"place": "Prato della Valle", "radius_m": 300})
+    assert "BUFFER" in out["summary"] and "300" in out["summary"]
+    geom = json.loads(out["geojson"])["features"][0]["geometry"]
+    assert geom["type"] in ("Polygon", "MultiPolygon")
+
+
+def test_locate_place_geocode_failure():
     tools = _graph_tools(lambda place, viewbox=None: None)
-    out = tools["geocode_place"].invoke({"place": "nessun luogo"})
+    out = tools["locate_place"].invoke({"place": "nessun luogo"})
     assert "GEOCODE_FAILED" in out["summary"]
     assert out["geojson"] is None

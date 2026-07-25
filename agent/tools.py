@@ -4,6 +4,7 @@ from langchain_core.tools import tool
 
 from .safety import extract_sql, validate_readonly_sql, UnsafeQueryError
 from .geocode import geocode, current_viewport, viewbox_from_viewport
+from .geometry import feature_collection, buffer_geometry
 
 log = logging.getLogger(__name__)
 
@@ -73,19 +74,34 @@ def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spat
                                 execute_sql=execute_sql, schema=schema, max_attempts=max_attempts,
                                 label="spatial_analysis")
 
-    @tool
-    def geocode_place(place: str) -> dict:
-        """Resolve a NAMED place (square, street, monument, address) to real WGS84
-        coordinates. ALWAYS call this before draw_geometry for a named location, then pass
-        the returned lat/lon to draw_geometry. Do NOT guess coordinates."""
-        result = _geocode(place, viewbox=viewbox_from_viewport(current_viewport.get()))
-        if result is None:
-            return {"summary": f"GEOCODE_FAILED: '{place}' non trovato. "
-                               f"Chiedi conferma delle coordinate all'operatore.", "geojson": None}
-        return {"summary": f"GEOCODED: {result['name']} -> "
-                          f"lat={result['lat']}, lon={result['lon']}", "geojson": None}
+    def _locate(place):
+        return _geocode(place, viewbox=viewbox_from_viewport(current_viewport.get()))
 
-    return [query_intel, draw_geometry, spatial_analysis, geocode_place]
+    _FAILED = ("GEOCODE_FAILED: '{place}' non trovato. "
+               "Chiedi conferma delle coordinate all'operatore.")
+
+    @tool
+    def locate_place(place: str) -> dict:
+        """Show/TRACE a NAMED place (street, square, monument, address) using its REAL
+        geometry (the actual street line or square outline). Use for 'trace / outline /
+        mark / show X'. Do NOT rebuild the shape yourself."""
+        r = _locate(place)
+        if r is None:
+            return {"summary": _FAILED.format(place=place), "geojson": None}
+        return {"summary": f"LOCATED: {r['name']} (real geometry shown)",
+                "geojson": feature_collection(r["geometry"], r["name"])}
+
+    @tool
+    def buffer_around(place: str, radius_m: int = 500) -> dict:
+        """Draw a buffer of `radius_m` metres AROUND the REAL geometry of a NAMED place.
+        Use for 'area / radius / within N metres around X'. Default radius 500 m."""
+        r = _locate(place)
+        if r is None:
+            return {"summary": _FAILED.format(place=place), "geojson": None}
+        return {"summary": f"BUFFER {radius_m}m around {r['name']}",
+                "geojson": buffer_geometry(r["geometry"], radius_m)}
+
+    return [query_intel, draw_geometry, spatial_analysis, locate_place, buffer_around]
 
 
 def make_tools(*, generate_query_sql, generate_geometry_sql, execute_sql,
