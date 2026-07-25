@@ -83,6 +83,15 @@ def test_run_sql_pipeline_success_returns_dict():
     assert "Duomo" in out["summary"]
     assert out["geojson"] is not None
 
+def test_run_sql_pipeline_offline_when_execute_sql_none():
+    calls = []
+    out = run_sql_pipeline(lambda request, error: calls.append(1) or "SELECT 1",
+                           "x", execute_sql=None, schema="schema1")
+    assert "DATABASE_OFFLINE" in out["summary"]
+    assert out["geojson"] is None
+    assert calls == []  # non genera nemmeno l'SQL
+
+
 def test_run_sql_pipeline_blocks_unsafe():
     calls = []
     out = run_sql_pipeline(

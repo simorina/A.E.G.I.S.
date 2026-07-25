@@ -18,7 +18,7 @@ Il cuore è un `StateGraph` di **LangGraph**; l'orchestrazione imperativa preced
 
 ```mermaid
 flowchart LR
-    UI["Frontend<br/>(aegis.html + Leaflet)"] -->|"POST /api/chat<br/>{message, session_id, resume}"| API["server.py<br/>(FastAPI)"]
+    UI["Frontend<br/>(aegis.html + Leaflet)"] -->|"POST /api/chat<br/>{message, session_id, viewport, resume}"| API["server.py<br/>(FastAPI)"]
     API -->|"agent.run(...)"| AG["agent/ (LangGraph)"]
     AG -->|"SQL read-only"| DB[("PostGIS<br/>schema1")]
     AG -->|"prompt / tool-calling"| LLM["Ollama<br/>(text + vision)"]
@@ -216,11 +216,23 @@ Esecuzione: `python -m pytest tests/ -v`.
 ```
 Operatore  →  aegis.html (session_id, markdown render)
            →  POST /api/chat
-           →  server.py  →  agent.run(message, session_id, resume?)
+           →  server.py  →  agent.run(message, session_id, viewport, resume?)
                           →  LangGraph: agent ⇄ tools (ReAct) [⇄ clarify] → ground
                                          │
                                          ├─ run_sql_pipeline → safety (Strato 1) → execute_readonly (Strato 2) → PostGIS
+                                         ├─ locate_place/buffer_around/trace_streets → Nominatim + Overpass
                                          └─ briefing verificato + GeoJSON
            ←  {text, geojson, awaiting_input}
            ←  render: markdown in chat + GeoJSON su Leaflet
 ```
+
+---
+
+## 12. Limiti noti
+
+- **Attributi non presenti nel DB** (es. vie *"più trafficate"*, *"più importanti"*): il DB contiene solo fermate metro, parchi e ospedali di Milano. Domande su traffico/importanza → la **scelta dei luoghi è una stima dell'LLM**, non fondata su dati, e il nodo `ground` non può verificarla.
+- **Match esatto dei nomi (Overpass)**: `trace_streets`/`fetch_street` cercano il tag `name` OSM **esatto**; nomi leggermente diversi vengono **saltati** (elencati nel `summary`). Nessun fuzzy matching.
+- **Overpass pubblico**: soggetto a rate-limit. Mitigato da **throttle ~1/s**, **retry con backoff** e **batch** (una query per più vie). Se bloccato → fallback al tratto di Nominatim.
+- **DB spento**: i tool geo (`locate_place`/`buffer_around`/`trace_streets`) e la vision **funzionano** anche senza DB. Solo i tool SQL (`query_intel`/`spatial_analysis`/`draw_geometry`, che valutano PostGIS) rispondono `DATABASE_OFFLINE` in modo pulito.
+- **Tool-calling del modello**: il grafo assume che `TEXT_MODEL` supporti il tool-calling nativo; con `AGENT_TOOL_CALLING=off` si passa all'orchestratore imperativo di fallback (senza i tool geo).
+- **Vision**: richiede un `VISION_MODEL` multimodale.

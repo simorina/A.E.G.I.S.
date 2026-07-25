@@ -18,7 +18,10 @@ def request_clarification(question: str) -> dict:
 
 
 def run_sql_pipeline(generate, request, *, execute_sql, schema, max_attempts=3, label: str = "") -> dict:
-    """genera->estrai->valida->esegui->auto-correggi. Ritorna {'summary','geojson'}."""
+    """genera->estrai->valida->esegui->auto-correggi. Ritorna {'summary','geojson'}.
+    Se `execute_sql` è None (DB non raggiungibile) degrada subito, senza generare SQL."""
+    if execute_sql is None:
+        return {"summary": "DATABASE_OFFLINE: intel database non raggiungibile.", "geojson": None}
     error = ""
     for attempt in range(max_attempts):
         raw = generate(request=request, error=error)
