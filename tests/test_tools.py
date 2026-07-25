@@ -104,7 +104,7 @@ def test_make_graph_tools_names_and_dict_return():
         schema="schema1",
     )}
     assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis",
-                          "locate_place", "buffer_around"}
+                          "locate_place", "buffer_around", "trace_streets"}
     out = tools["spatial_analysis"].invoke({"request": "nearest"})
     assert out["geojson"] is not None
     assert "Duomo" in out["summary"]
@@ -148,5 +148,67 @@ def test_buffer_around_returns_polygon():
 def test_locate_place_geocode_failure():
     tools = _graph_tools(lambda place, viewbox=None: None)
     out = tools["locate_place"].invoke({"place": "nessun luogo"})
+    assert "GEOCODE_FAILED" in out["summary"]
+    assert out["geojson"] is None
+
+
+def _street_tools(fetch_streets_fn):
+    return {t.name: t for t in make_graph_tools(
+        generate_query_sql=lambda request, error: "SELECT 1 AS geom",
+        generate_geometry_sql=lambda request, error: "SELECT 1 AS geom",
+        generate_spatial_sql=lambda request, error: "SELECT 1 AS geom",
+        execute_sql=lambda sql: FakeGDF(),
+        schema="schema1",
+        fetch_streets_fn=fetch_streets_fn,
+    )}
+
+
+_VP = {"lat": 45.46, "lon": 9.19, "north": 45.5, "south": 45.4, "east": 9.3, "west": 9.1}
+_MLS_A = {"type": "MultiLineString", "coordinates": [[[9.0, 45.0], [9.1, 45.1]]]}
+_MLS_B = {"type": "MultiLineString", "coordinates": [[[9.2, 45.2], [9.3, 45.3]]]}
+
+
+def test_trace_streets_multiple_in_one_call():
+    import json
+    from agent.geocode import current_viewport
+    seen = {}
+
+    def fake(names, bbox):
+        seen["names"] = names
+        seen["bbox"] = bbox
+        return {"Via A": _MLS_A, "Via B": _MLS_B}
+
+    token = current_viewport.set(_VP)
+    try:
+        tools = _street_tools(fake)
+        out = tools["trace_streets"].invoke({"places": ["Via A", "Via B"]})
+    finally:
+        current_viewport.reset(token)
+    assert "TRACED" in out["summary"] and "2" in out["summary"]
+    fc = json.loads(out["geojson"])
+    assert len(fc["features"]) == 2
+    assert seen["names"] == ["Via A", "Via B"]
+    assert seen["bbox"] == (45.4, 9.1, 45.5, 9.3)  # (s,w,n,e) dal viewport
+
+
+def test_trace_streets_requires_viewport():
+    from agent.geocode import current_viewport
+    token = current_viewport.set(None)
+    try:
+        tools = _street_tools(lambda names, bbox: {"Via A": _MLS_A})
+        out = tools["trace_streets"].invoke({"places": ["Via A"]})
+    finally:
+        current_viewport.reset(token)
+    assert out["geojson"] is None
+
+
+def test_trace_streets_none_found():
+    from agent.geocode import current_viewport
+    token = current_viewport.set(_VP)
+    try:
+        tools = _street_tools(lambda names, bbox: {})
+        out = tools["trace_streets"].invoke({"places": ["Nope"]})
+    finally:
+        current_viewport.reset(token)
     assert "GEOCODE_FAILED" in out["summary"]
     assert out["geojson"] is None

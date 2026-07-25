@@ -4,7 +4,8 @@ from langchain_core.tools import tool
 
 from .safety import extract_sql, validate_readonly_sql, UnsafeQueryError
 from .geocode import geocode, current_viewport, viewbox_from_viewport
-from .geometry import feature_collection, buffer_geometry
+from .geometry import feature_collection, feature_collection_multi, buffer_geometry
+from .overpass import fetch_streets, bbox_from_viewport
 
 log = logging.getLogger(__name__)
 
@@ -46,9 +47,10 @@ def run_sql_pipeline(generate, request, *, execute_sql, schema, max_attempts=3, 
 
 
 def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spatial_sql,
-                     execute_sql, schema, geocode_fn=None, max_attempts=3):
+                     execute_sql, schema, geocode_fn=None, fetch_streets_fn=None, max_attempts=3):
     """Tool per il grafo LangGraph: ognuno ritorna {'summary','geojson'}."""
     _geocode = geocode_fn or geocode
+    _fetch_streets = fetch_streets_fn or fetch_streets
 
     @tool
     def query_intel(request: str) -> dict:
@@ -101,7 +103,24 @@ def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spat
         return {"summary": f"BUFFER {radius_m}m around {r['name']}",
                 "geojson": buffer_geometry(r["geometry"], radius_m)}
 
-    return [query_intel, draw_geometry, spatial_analysis, locate_place, buffer_around]
+    @tool
+    def trace_streets(places: list) -> dict:
+        """Trace MULTIPLE named streets AT ONCE using their real geometry, in a SINGLE query.
+        Use when the operator asks for several streets together (e.g. 'the 5 main streets of X').
+        Needs the current map view."""
+        bbox = bbox_from_viewport(current_viewport.get())
+        if bbox is None:
+            return {"summary": "Serve la vista mappa per tracciare più vie insieme. "
+                               "Centra l'area e riprova.", "geojson": None}
+        streets = _fetch_streets(list(places), bbox)
+        if not streets:
+            return {"summary": "GEOCODE_FAILED: nessuna delle vie trovata nell'area corrente. "
+                               "Chiedi conferma all'operatore.", "geojson": None}
+        pairs = [(geom, name) for name, geom in streets.items()]
+        return {"summary": f"TRACED {len(streets)} vie: {', '.join(streets)}",
+                "geojson": feature_collection_multi(pairs)}
+
+    return [query_intel, draw_geometry, spatial_analysis, locate_place, buffer_around, trace_streets]
 
 
 def make_tools(*, generate_query_sql, generate_geometry_sql, execute_sql,
