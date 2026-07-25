@@ -7,6 +7,13 @@ from .safety import extract_sql, validate_readonly_sql, UnsafeQueryError
 log = logging.getLogger(__name__)
 
 
+@tool
+def request_clarification(question: str) -> dict:
+    """Ask the operator ONE clarifying question when the request is ambiguous or missing
+    required details (which metro line? which coordinates?). Call this ALONE."""
+    return {"summary": question, "geojson": None}
+
+
 def run_sql_pipeline(generate, request, *, execute_sql, schema, max_attempts=3) -> dict:
     """genera->estrai->valida->esegui->auto-correggi. Ritorna {'summary','geojson'}."""
     error = ""

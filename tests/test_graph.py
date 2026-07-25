@@ -1,8 +1,10 @@
 from langchain_core.messages import AIMessage
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import Command
 
 from agent.graph import build_graph
+from agent.tools import request_clarification
 
 
 FC1 = '{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"n":1},"geometry":null}]}'
@@ -55,3 +57,17 @@ def test_grounding_receives_tool_data():
                         ground_fn=ground, checkpointer=MemorySaver())
     graph.invoke({"messages": [("user", "q")], "geojson": None, "session_id": "t2"}, _cfg("t2"))
     assert "Duomo" in seen["data"]
+
+def test_clarify_interrupts_then_resumes():
+    scripted = [
+        AIMessage(content="", tool_calls=[{"name": "request_clarification",
+                                           "args": {"question": "Quale linea?"}, "id": "c1"}]),
+        AIMessage(content="done"),  # dopo il resume, nessun tool -> ground -> END
+    ]
+    graph = build_graph(llm=ScriptedLLM(scripted), tools=[fake_query, request_clarification],
+                        ground_fn=lambda draft, data: draft, checkpointer=MemorySaver())
+    cfg = _cfg("t3")
+    res = graph.invoke({"messages": [("user", "metro")], "geojson": None, "session_id": "t3"}, cfg)
+    assert res["__interrupt__"][0].value["question"] == "Quale linea?"
+    res2 = graph.invoke(Command(resume="M4"), cfg)
+    assert res2["messages"][-1].content == "done"

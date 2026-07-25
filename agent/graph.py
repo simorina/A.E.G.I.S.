@@ -2,10 +2,13 @@ from typing import TypedDict, Annotated, Optional
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.types import interrupt
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 
 from .prompts import AGENT_SYSTEM_PROMPT
 from .geojson import merge_geojson
+
+CLARIFY_TOOL_NAME = "request_clarification"
 
 
 class AgentState(TypedDict):
@@ -43,18 +46,36 @@ def build_graph(*, llm, tools, ground_fn, checkpointer):
         grounded = ground_fn(last.content, data)
         return {"messages": [AIMessage(content=grounded, id=last.id)]}
 
+    def clarify_node(state: AgentState):
+        last = state["messages"][-1]
+        question = next((c["args"].get("question", "Chiarimento richiesto.")
+                         for c in last.tool_calls if c["name"] == CLARIFY_TOOL_NAME),
+                        "Chiarimento richiesto.")
+        answer = interrupt({"question": question})
+        msgs = []
+        for c in last.tool_calls:
+            content = answer if c["name"] == CLARIFY_TOOL_NAME else "(in attesa di chiarimento)"
+            msgs.append(ToolMessage(content=content, tool_call_id=c["id"]))
+        return {"messages": msgs}
+
     def route_after_agent(state: AgentState):
         last = state["messages"][-1]
-        if getattr(last, "tool_calls", None):
-            return "tools"
-        return "ground"
+        calls = getattr(last, "tool_calls", None)
+        if not calls:
+            return "ground"
+        if any(c["name"] == CLARIFY_TOOL_NAME for c in calls):
+            return "clarify"
+        return "tools"
 
     g = StateGraph(AgentState)
     g.add_node("agent", agent_node)
     g.add_node("tools", tools_node)
     g.add_node("ground", ground_node)
+    g.add_node("clarify", clarify_node)
     g.add_edge(START, "agent")
-    g.add_conditional_edges("agent", route_after_agent, {"tools": "tools", "ground": "ground"})
+    g.add_conditional_edges("agent", route_after_agent,
+                            {"tools": "tools", "ground": "ground", "clarify": "clarify"})
     g.add_edge("tools", "agent")
+    g.add_edge("clarify", "agent")
     g.add_edge("ground", END)
     return g.compile(checkpointer=checkpointer)
