@@ -106,6 +106,7 @@ def sql_query_template(schema: str) -> str:
     """Template MODE 1 con lo schema iniettato; lascia liberi {table_info},{question},{error}."""
     return _SQL_QUERY_TEMPLATE.replace("{schema}", schema)
 
+
 GROUNDING_TEMPLATE = """\
 You are a strict fact-checker for a GEOINT briefing.
 DATA returned by the tools:

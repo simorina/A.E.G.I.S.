@@ -71,3 +71,18 @@ def test_clarify_interrupts_then_resumes():
     assert res["__interrupt__"][0].value["question"] == "Quale linea?"
     res2 = graph.invoke(Command(resume="M4"), cfg)
     assert res2["messages"][-1].content == "done"
+
+def test_geojson_resets_between_turns():
+    from agent.geojson import RESET_GEOJSON
+    scripted = [
+        AIMessage(content="", tool_calls=[{"name": "fake_query", "args": {"request": "x"}, "id": "c1"}]),
+        AIMessage(content="turn1 done"),
+        AIMessage(content="turn2 done"),   # turno 2: nessun tool_call
+    ]
+    graph = build_graph(llm=ScriptedLLM(scripted), tools=[fake_query],
+                        ground_fn=lambda draft, data: draft, checkpointer=MemorySaver())
+    cfg = _cfg("reset1")
+    r1 = graph.invoke({"messages": [("user", "turn1")], "geojson": RESET_GEOJSON, "session_id": "reset1"}, cfg)
+    assert r1["geojson"] == FC1  # turno 1 produce la feature
+    r2 = graph.invoke({"messages": [("user", "turn2")], "geojson": RESET_GEOJSON, "session_id": "reset1"}, cfg)
+    assert r2["geojson"] is None  # turno 2 NON riemette la feature del turno 1

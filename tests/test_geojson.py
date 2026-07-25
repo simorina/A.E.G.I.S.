@@ -18,3 +18,9 @@ def test_merge_concatenates_features():
 def test_merge_invalid_prefers_valid():
     assert merge_geojson("not-json", FC_B) == FC_B
     assert merge_geojson(FC_A, "not-json") == FC_A
+
+def test_merge_both_invalid_returns_none():
+    assert merge_geojson("nope", "also-nope") is None
+
+def test_merge_valid_non_object_treated_as_invalid():
+    assert merge_geojson("5", FC_B) == FC_B

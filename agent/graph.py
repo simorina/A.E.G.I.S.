@@ -6,14 +6,14 @@ from langgraph.types import interrupt
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 
 from .prompts import AGENT_SYSTEM_PROMPT
-from .geojson import merge_geojson
+from .geojson import merge_geojson, geojson_reducer
 
 CLARIFY_TOOL_NAME = "request_clarification"
 
 
 class AgentState(TypedDict):
     messages: Annotated[list, add_messages]
-    geojson: Annotated[Optional[str], merge_geojson]
+    geojson: Annotated[Optional[str], geojson_reducer]
     session_id: str
 
 

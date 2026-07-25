@@ -10,6 +10,7 @@ from langchain_core.messages import HumanMessage
 
 from .config import load_config
 from .db import make_engine, make_sql_database, get_table_info, execute_readonly
+from .geojson import RESET_GEOJSON
 from .llm import build_text_llm, build_vision_llm
 from .prompts import (sql_query_template, GEOMETRY_TEMPLATE, BRIEFING_TEMPLATE,
                       spatial_query_template, GROUNDING_TEMPLATE)
@@ -118,24 +119,24 @@ _orchestrator = Orchestrator(
 
 
 def run(message, session_id, image=None, mime_type="image/jpeg", resume=None):
+    if engine is None and image is None:
+        return {"text": "Tactical engine offline.", "geojson": None, "awaiting_input": False}
+
     # Fallback per modelli senza tool-calling nativo.
     if not config.tool_calling:
         out = _orchestrator.run(message, session_id, image, mime_type)
         return {**out, "awaiting_input": False}
 
-    if engine is None and image is None:
-        return {"text": "Tactical engine offline.", "geojson": None, "awaiting_input": False}
-
-    cfg = {"configurable": {"thread_id": session_id}, "recursion_limit": config.recursion_limit}
-
     if image is not None:
         text = _analyze_image(image, message or "", mime_type)
         return {"text": text, "geojson": None, "awaiting_input": False}
 
+    cfg = {"configurable": {"thread_id": session_id}, "recursion_limit": config.recursion_limit}
+
     if resume is not None:
         inp = Command(resume=resume)
     else:
-        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id, "geojson": None}
+        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id, "geojson": RESET_GEOJSON}
 
     result = _graph.invoke(inp, cfg)
 
