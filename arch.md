@@ -40,6 +40,7 @@ Ogni modulo ha una responsabilità singola e un'interfaccia netta; le funzioni p
 | `safety.py` | Guardrail SQL: `extract_sql` (parsing) + `validate_readonly_sql` (validazione statica). |
 | `geocode.py` | Geocoding via Nominatim/OSM diretto (`geocode` → nome/lat/lon/**geometria reale**, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
 | `geometry.py` | Helper geometrie: `feature_collection` (wrap GeoJSON) + `buffer_geometry` (buffer metrico in UTM). |
+| `overpass.py` | `fetch_street` (via intera da Overpass) + `resolve_place` (ibrido Nominatim+Overpass: Overpass solo per le strade). |
 | `prompts.py` | Tutti i prompt spezzati: system dell'agente, template SQL / geometry / spatial, grounding, vision, briefing. Schema **iniettato** da `Config.SCHEMA`. |
 | `tools.py` | `run_sql_pipeline` (condivisa) + `make_graph_tools` (i tool del grafo) + `request_clarification` + `make_tools` (legacy fallback). |
 | `graph.py` | Il **`StateGraph`**: stato, nodi (`agent`/`tools`/`clarify`/`ground`), routing. |
@@ -118,6 +119,7 @@ Per evitare che l'LLM **indovini** le coordinate/forme (causa di geometrie fuori
 
 - **`agent/geocode.py`** interroga Nominatim direttamente (`polygon_geojson=1`) e ritorna `{name, lat, lon, geometry}` — la **geometria reale** (la LineString della via, il Polygon della piazza; fallback Point). HTTP iniettabile → test offline.
 - **`locate_place`** rende quella geometria direttamente sulla mappa (per *"traccia X"*); **`buffer_around`** ne calcola il **buffer metrico** (`agent/geometry.py`, riproiezione in **UTM** con geopandas/shapely) per *"area attorno a X"*. Così l'LLM non ricostruisce più la forma.
+- **Ibrido Nominatim + Overpass** (`agent/overpass.py`, `resolve_place`): Nominatim è già completo per piazze/parchi/edifici; **solo per le strade** (una LineString = un tratto) si interroga **Overpass** (`fetch_street`) per unire tutti i tratti nel bbox → la **via intera** (MultiLineString). Fallback a Nominatim se Overpass fallisce.
 - **Viewport della mappa** — il frontend manda `viewport` (centro + bounds); entra in `AgentState`, iniettato nel system prompt (`OPERATOR MAP VIEW`) per *"attorno a qui"*, e **biasa** il geocoding (viewbox Nominatim) via il `ContextVar` `current_viewport` impostato da `run()` — evitando `InjectedState` (in `langgraph.prebuilt`, incompatibile).
 - Geocoding fallito → `request_clarification` (niente coordinate inventate).
 
