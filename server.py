@@ -1,14 +1,14 @@
 import uvicorn
-import geopandas as gpd
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import base64
 from sqlalchemy import text
 from io import BytesIO
 from PIL import Image
 import contextily as ctx
 
-from agent import engine, extract_sql_from_response, generate_query_chain, summary_chain, analyze_satellite_image
+import agent
 
 app = FastAPI(title="Tactical Sat-Link API")
 
@@ -20,7 +20,10 @@ app.add_middleware(
 )
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = ""
+    image_data: str | None = None
+    image_name: str | None = None
+    session_id: str | None = None
 
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
@@ -29,6 +32,22 @@ class ScanRequest(BaseModel):
 class LoginRequest(BaseModel):
     operator_id: str
     access_key: str
+
+
+def decode_image_payload(image_data: str) -> tuple[bytes, str]:
+    """Decode an optional data URL or raw base64 payload into bytes."""
+    mime_type = "image/jpeg"
+    payload = image_data.strip()
+
+    if payload.startswith("data:") and "," in payload:
+        header, payload = payload.split(",", 1)
+        if ";" in header:
+            mime_type = header[5:header.index(";")]
+
+    try:
+        return base64.b64decode(payload, validate=True), mime_type
+    except Exception:
+        return base64.b64decode(payload), mime_type
 
 # --- ENDPOINTS ---
 
@@ -42,7 +61,7 @@ async def login_endpoint(creds: LoginRequest):
         query = text("SELECT * FROM schema1.auth WHERE username = :username AND password = :password")
         
         # Eseguiamo la query usando una connessione dal pool dell'engine
-        with engine.connect() as conn:
+        with agent.engine.connect() as conn:
             # Passiamo i parametri in modo sicuro
             result = conn.execute(query, {"username": creds.operator_id, "password": creds.access_key}).fetchone()
 
@@ -70,38 +89,27 @@ async def login_endpoint(creds: LoginRequest):
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    if not engine or not generate_query_chain:
-        raise HTTPException(status_code=503, detail="Tactical engine offline.")
+    session_id = request.session_id or "anonymous"
+    image_bytes = None
+    mime_type = "image/jpeg"
 
-    last_error = ""
-    for attempt in range(3):
+    if request.image_data:
         try:
-            # Step 1: Generate Query
-            raw_response = generate_query_chain.invoke({"question": request.message, "error": last_error})
-            query = extract_sql_from_response(raw_response)
-            print(f"Generated SQL Query: {query}")
-            if not query:
-                raise ValueError("LLM generated an empty query.")
-
-            # Step 2: Execute PostGIS Query
-            gdf = gpd.read_postgis(text(query), con=engine, geom_col='geom')
-            
-            # Step 3: Format Response
-            if gdf.empty:
-                return {"text": "No tactical data found in this sector.", "geojson": None}
-
-            geojson = gdf.to_json()
-            # Remove geometries for the text summary to save tokens
-            summary_data = gdf.drop(columns=['geom', 'geometry'], errors='ignore').to_string()
-            description = summary_chain.invoke({"data_summary": summary_data})
-
-            return {"text": description, "geojson": geojson}
-
+            image_bytes, mime_type = decode_image_payload(request.image_data)
         except Exception as e:
-            print(f"Attempt {attempt + 1} failed: {str(e)}")
-            last_error = str(e)
-            if attempt == 2:
-                return {"text": f"SYSTEM_FAILURE: {last_error}", "geojson": None}
+            print(f"Vision Error: {e}")
+            raise HTTPException(status_code=400, detail="Invalid image payload.")
+
+    try:
+        return agent.run(
+            message=request.message,
+            session_id=session_id,
+            image=image_bytes,
+            mime_type=mime_type,
+        )
+    except Exception as e:
+        print(f"Chat Error: {e}")
+        return {"text": f"SYSTEM_FAILURE: {e}", "geojson": None}
 
 @app.post("/api/scan")
 async def scan_endpoint(request: ScanRequest):
@@ -121,7 +129,7 @@ async def scan_endpoint(request: ScanRequest):
         pil_img.save(buff, format="JPEG", quality=85)
         
         # 3. AI Analysis
-        description = analyze_satellite_image(buff.getvalue())
+        description = agent.analyze_satellite_image(agent.vision_llm, buff.getvalue())
         return {"text": description}
 
     except Exception as e:
