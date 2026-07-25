@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     image_name: str | None = None
     session_id: str | None = None
     resume: str | None = None
+    viewport: dict | None = None
 
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
@@ -108,6 +109,7 @@ async def chat_endpoint(request: ChatRequest):
             image=image_bytes,
             mime_type=mime_type,
             resume=request.resume,
+            viewport=request.viewport,
         )
     except Exception as e:
         print(f"Chat Error: {e}")
