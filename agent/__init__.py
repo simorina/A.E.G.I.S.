@@ -63,6 +63,11 @@ def _execute_sql(sql):
     return execute_readonly(engine, sql, config.statement_timeout_ms)
 
 
+# Col DB spento i tool SQL ricevono None e degradano puliti (DATABASE_OFFLINE);
+# i tool geo (locate/buffer/trace) e la vision restano operativi.
+_exec_sql = _execute_sql if engine is not None else None
+
+
 def _briefing(data_summary):
     return _briefing_chain.invoke({"data_summary": data_summary})
 
@@ -75,7 +80,7 @@ def _build_tools(ctx):
     return make_tools(
         generate_query_sql=_generate_query_sql,
         generate_geometry_sql=_generate_geometry_sql,
-        execute_sql=_execute_sql,
+        execute_sql=_exec_sql,
         schema=config.schema,
         ctx=ctx,
     )
@@ -101,7 +106,7 @@ _graph_tools = make_graph_tools(
     generate_query_sql=_generate_query_sql,
     generate_geometry_sql=_generate_geometry_sql,
     generate_spatial_sql=_generate_spatial_sql,
-    execute_sql=_execute_sql,
+    execute_sql=_exec_sql,
     schema=config.schema,
     geocode_fn=resolve_place,
 ) + [request_clarification]
@@ -122,8 +127,8 @@ _orchestrator = Orchestrator(
 
 
 def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, viewport=None):
-    if engine is None and image is None:
-        return {"text": "Tactical engine offline.", "geojson": None, "awaiting_input": False}
+    # Nessuna guardia offline a livello di run(): i tool geo/vision funzionano senza DB;
+    # i soli tool SQL degradano puliti (DATABASE_OFFLINE) via execute_sql=None.
 
     # Fallback per modelli senza tool-calling nativo.
     if not config.tool_calling:
