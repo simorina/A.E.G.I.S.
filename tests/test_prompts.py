@@ -38,6 +38,7 @@ def test_system_prompt_mentions_new_tools():
     assert "request_clarification" in p
     assert "locate_place" in p
     assert "buffer_around" in p
+    assert "trace_streets" in p
 
 
 def test_viewport_hint_present_and_absent():
