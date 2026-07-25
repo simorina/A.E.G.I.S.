@@ -36,7 +36,8 @@ def test_system_prompt_mentions_new_tools():
     p = prompts.AGENT_SYSTEM_PROMPT
     assert "spatial_analysis" in p
     assert "request_clarification" in p
-    assert "geocode_place" in p
+    assert "locate_place" in p
+    assert "buffer_around" in p
 
 
 def test_viewport_hint_present_and_absent():
