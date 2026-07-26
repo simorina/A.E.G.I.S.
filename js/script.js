@@ -99,6 +99,15 @@ function clearChatHistory() {
     awaitingClarification = false;
 }
 
+// Icone SVG (Lucide) — mai emoji come icone strutturali
+const ICON_RENAME = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>`;
+const ICON_DELETE = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>`;
+
+function updateArchiveCount(n) {
+    const badge = document.getElementById('archive-count');
+    if (badge) badge.innerText = String(n);
+}
+
 async function loadConversations() {
     const list = document.getElementById('conversation-list');
     if (!list) return;
@@ -108,24 +117,36 @@ async function loadConversations() {
         if (!res.ok) throw new Error('list failed');
         items = await res.json();
     } catch (e) {
-        list.innerHTML = '<div class="text-[10px] text-amber-500/50 font-mono px-2">ARCHIVIO NON DISPONIBILE</div>';
+        list.innerHTML = '<div class="archive-empty">ARCHIVIO NON DISPONIBILE</div>';
+        updateArchiveCount(0);
         return;
     }
+    updateArchiveCount(items.length);
     list.innerHTML = '';
+    if (items.length === 0) {
+        list.innerHTML = '<div class="archive-empty">NESSUNA CONVERSAZIONE</div>';
+        return;
+    }
     items.forEach(conv => {
         const row = document.createElement('div');
         row.className = 'conversation-item' + (conv.id === currentConversationId ? ' active' : '');
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
         row.innerHTML = `<span class="title"></span>
             <span class="actions">
-                <button type="button" data-act="rename" title="Rinomina">✎</button>
-                <button type="button" data-act="delete" title="Elimina">🗑</button>
+                <button type="button" class="btn-icon" data-act="rename" aria-label="Rinomina conversazione">${ICON_RENAME}</button>
+                <button type="button" class="btn-icon is-danger" data-act="delete" aria-label="Elimina conversazione">${ICON_DELETE}</button>
             </span>`;
         row.querySelector('.title').innerText = conv.title;
         row.addEventListener('click', (ev) => {
-            const act = ev.target.dataset ? ev.target.dataset.act : null;
+            const actionBtn = ev.target.closest ? ev.target.closest('[data-act]') : null;
+            const act = actionBtn ? actionBtn.dataset.act : null;
             if (act === 'rename') { ev.stopPropagation(); renameConversation(conv.id, conv.title); }
             else if (act === 'delete') { ev.stopPropagation(); deleteConversation(conv.id); }
             else { openConversation(conv.id); }
+        });
+        row.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); openConversation(conv.id); }
         });
         list.appendChild(row);
     });
@@ -177,9 +198,26 @@ async function deleteConversation(id) {
     await loadConversations();
 }
 
+function setArchiveOpen(open) {
+    const toggle = document.getElementById('archive-toggle');
+    const panel = document.getElementById('archive-panel');
+    if (!toggle || !panel) return;
+    toggle.setAttribute('aria-expanded', String(open));
+    panel.hidden = !open;
+}
+
+function isArchiveOpen() {
+    const toggle = document.getElementById('archive-toggle');
+    return toggle ? toggle.getAttribute('aria-expanded') === 'true' : false;
+}
+
 async function initConversations() {
     const btn = document.getElementById('new-chat-btn');
     if (btn) btn.addEventListener('click', () => createConversation().catch(() => {}));
+
+    const toggle = document.getElementById('archive-toggle');
+    if (toggle) toggle.addEventListener('click', () => setArchiveOpen(!isArchiveOpen()));
+
     await loadConversations();
     if (!currentConversationId) {
         try { await createConversation(); } catch (e) { /* DB offline: chat effimera */ }
@@ -198,13 +236,11 @@ function updateAttachmentBar() {
     if (!attachmentBar || !attachmentLabel) return;
 
     if (pendingAttachment) {
-        attachmentLabel.innerText = `ATTACHED IMAGE: ${pendingAttachment.name}`;
-        attachmentBar.classList.remove('hidden');
-        attachmentBar.classList.add('flex');
+        attachmentLabel.innerText = pendingAttachment.name;
+        attachmentBar.hidden = false;
     } else {
         attachmentLabel.innerText = 'ATTACHED IMAGE READY';
-        attachmentBar.classList.add('hidden');
-        attachmentBar.classList.remove('flex');
+        attachmentBar.hidden = true;
     }
 }
 

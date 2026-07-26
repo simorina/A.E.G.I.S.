@@ -539,24 +539,180 @@ html, body {
     }
 }
 
-/* --- Lista conversazioni (sidebar) --- */
+/* =====================================================================
+   SIDEBAR — sistema di design
+   Scala spaziatura 4/8: 4 8 12 16 24 32
+   Gerarchia: header (compatto) < archivio (collassabile) < terminale (dominante)
+   ===================================================================== */
+:root {
+    --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px;
+    --sp-4: 16px; --sp-6: 24px; --sp-8: 32px;
+
+    --surface-1: rgba(255, 255, 255, 0.03);   /* riposo   */
+    --surface-2: rgba(255, 255, 255, 0.06);   /* hover    */
+    --surface-accent: rgba(245, 158, 11, 0.12);
+    --hairline: rgba(245, 158, 11, 0.14);
+
+    --text-1: #f5f5f4;                        /* primario   ~15:1 */
+    --text-2: rgba(245, 245, 244, 0.72);      /* secondario ~7:1  */
+    --text-3: rgba(245, 245, 244, 0.48);      /* terziario        */
+    --focus-ring: 0 0 0 2px #050505, 0 0 0 4px var(--amber);
+}
+
+.sr-only {
+    position: absolute; width: 1px; height: 1px;
+    padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+.sidebar-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: var(--sp-4);
+    padding-top: 64px;                        /* spazio per il menu-toggle */
+    gap: var(--sp-4);
+    background: rgba(5, 5, 5, 0.92);
+    backdrop-filter: blur(12px);
+    border-right: 1px solid var(--hairline);
+}
+
+/* Focus visibile ovunque (sostituisce il focus:outline-none rimosso) */
+.sidebar-inner :is(button, input, [tabindex]):focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+    border-radius: 2px;
+}
+
+/* --- ZONA 1: header --------------------------------------------------- */
+.sidebar-header { flex: none; }
+.brand {
+    margin: 0;
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    color: var(--amber);
+    line-height: 1.2;
+}
+.brand-version { color: var(--text-3); font-weight: 400; }
+.link-status {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    margin: var(--sp-1) 0 0;
+    font-family: 'VT323', monospace;
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--text-2);
+}
+.status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 6px #4ade80;
+    animation: statusPulse 2.4s ease-in-out infinite;
+}
+@keyframes statusPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* Etichette di sezione: unico stile per ARCHIVIO / TERMINALE */
+.section-label {
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-3);
+}
+
+/* --- ZONA 2: archivio collassabile ------------------------------------ */
+.archive { flex: none; }
+.archive-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+}
+.archive-toggle {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: 1;
+    min-height: 44px;                          /* touch target */
+    padding: 0 var(--sp-1);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+}
+.archive-toggle:hover .section-label { color: var(--text-1); }
+.archive-toggle .chevron {
+    color: var(--text-3);
+    transition: transform 0.2s ease, color 0.2s ease;
+    flex: none;
+}
+.archive-toggle[aria-expanded="true"] .chevron {
+    transform: rotate(90deg);
+    color: var(--amber);
+}
+.archive-count {
+    font-family: 'VT323', monospace;
+    font-size: 12px;
+    color: var(--text-3);
+    background: var(--surface-1);
+    border-radius: 999px;
+    padding: 1px 8px;
+}
+.btn-new-chat {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    min-height: 44px;
+    padding: 0 var(--sp-3);
+    background: var(--surface-accent);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: var(--amber);
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.btn-new-chat:hover {
+    background: rgba(245, 158, 11, 0.22);
+    border-color: var(--amber);
+}
+
+.archive-panel { padding-top: var(--sp-2); }
+.archive-panel[hidden] { display: none; }
+.conversation-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 30vh;
+    overflow-y: auto;
+    padding-right: var(--sp-1);
+}
+
 .conversation-item {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.35rem 0.5rem;
+    gap: var(--sp-2);
+    min-height: 40px;
+    padding: var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
     border-left: 2px solid transparent;
     cursor: pointer;
     font-family: 'Chakra Petch', sans-serif;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.7);
-    transition: background 0.15s, border-color 0.15s;
+    font-size: 13px;
+    color: var(--text-2);
+    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
-.conversation-item:hover { background: rgba(245, 158, 11, 0.08); }
+.conversation-item:hover { background: var(--surface-2); color: var(--text-1); }
 .conversation-item.active {
-    background: rgba(245, 158, 11, 0.12);
+    background: var(--surface-accent);
     border-left-color: var(--amber);
-    color: #fff;
+    color: var(--text-1);
 }
 .conversation-item .title {
     flex: 1;
@@ -564,14 +720,165 @@ html, body {
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.conversation-item .actions { display: none; gap: 0.25rem; }
-.conversation-item:hover .actions { display: flex; }
-.conversation-item .actions button {
+.conversation-item .actions {
+    display: flex;
+    gap: var(--sp-1);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+.conversation-item:hover .actions,
+.conversation-item:focus-within .actions { opacity: 1; }
+
+/* Icon button riusabile: 44x44 di area, glifo 14-18px */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-3);
     cursor: pointer;
-    font-size: 0.7rem;
-    padding: 0 0.15rem;
+    transition: color 0.18s ease, background 0.18s ease;
+    position: relative;
 }
-.conversation-item .actions button:hover { color: var(--amber); }
+.btn-icon::after {                             /* hit area estesa a 44x44 */
+    content: '';
+    position: absolute;
+    inset: -8px;
+}
+.btn-icon:hover { color: var(--amber); background: var(--surface-2); }
+.btn-icon.is-danger:hover { color: #f87171; }
+
+.archive-empty {
+    padding: var(--sp-3);
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    color: var(--text-3);
+    text-align: center;
+}
+
+/* --- ZONA 3: terminale (dominante) ------------------------------------ */
+.terminal-label {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+}
+.terminal-label .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--hairline);
+}
+.chat-history {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-3);
+    padding-right: var(--sp-2);
+}
+.msg-system {
+    padding: var(--sp-3);
+    background: rgba(245, 158, 11, 0.05);
+    border-left: 2px solid var(--amber);
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 13px;
+    color: var(--text-2);
+}
+.msg-system strong {
+    color: var(--amber);
+    letter-spacing: 0.1em;
+    margin-right: var(--sp-1);
+}
+
+/* --- ZONA 4: composer -------------------------------------------------- */
+.composer {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--sp-2);
+}
+.attachment-bar {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-2);
+    padding: var(--sp-2) var(--sp-3);
+    background: var(--surface-accent);
+    border-left: 2px solid var(--amber);
+    font-family: 'VT323', monospace;
+    font-size: 13px;
+    color: var(--amber);
+}
+.attachment-bar[hidden] { display: none; }
+.attachment-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Un solo contenitore (prima ce n'erano due annidati) */
+.composer-field {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-1);
+    padding: var(--sp-1);
+    background: var(--surface-1);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    transition: border-color 0.18s ease;
+}
+.composer-field:focus-within { border-color: var(--amber); }
+.composer-attach { flex: none; }
+.composer-input {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 var(--sp-2);
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text-1);
+    font-family: 'JetBrains Mono', 'VT323', monospace;
+    font-size: 14px;
+}
+.composer-input::placeholder { color: var(--text-3); }
+.btn-execute {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 40px; height: 40px;
+    background: var(--amber);
+    border: none;
+    color: #050505;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.12s ease;
+}
+.btn-execute:hover { background: #fbbf24; }
+.btn-execute:active { transform: scale(0.96); }
+
+.btn-recon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--sp-2);
+    min-height: 44px;
+    background: transparent;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    color: var(--amber);
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.btn-recon:hover {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: var(--amber);
+}
+
+/* Rispetta la preferenza di movimento ridotto */
+@media (prefers-reduced-motion: reduce) {
+    .sidebar-inner *,
+    .status-dot { animation: none !important; transition-duration: 0.01ms !important; }
+}
