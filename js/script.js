@@ -79,6 +79,20 @@ function getOperatorId() {
     return localStorage.getItem('aegis_operator_id') || 'ANONYMOUS';
 }
 
+/* L'operator_id viene salvato al login. Se manca (aegis.html aperto senza
+   passare dal login, o sessione precedente al fix) la UI lavorerebbe su
+   un'identità diversa da quella che possiede le conversazioni: lo diciamo
+   invece di fallire in silenzio. */
+function warnIfAnonymous() {
+    if (getOperatorId() !== 'ANONYMOUS') return false;
+    const list = document.getElementById('conversation-list');
+    if (list) {
+        list.innerHTML = '<div class="archive-empty">OPERATORE NON IDENTIFICATO<br>'
+            + 'Accedi da index.html per vedere le tue conversazioni.</div>';
+    }
+    return true;
+}
+
 async function createConversation() {
     const res = await fetch(`${API_BASE}/api/conversations`, {
         method: 'POST',
@@ -124,6 +138,7 @@ async function loadConversations() {
     updateArchiveCount(items.length);
     list.innerHTML = '';
     if (items.length === 0) {
+        if (warnIfAnonymous()) return;
         list.innerHTML = '<div class="archive-empty">NESSUNA CONVERSAZIONE</div>';
         return;
     }
@@ -227,9 +242,19 @@ async function clearArchive() {
         addMessage('ARCHIVIO NON DISPONIBILE: impossibile svuotare l\'archivio.', 'ai');
         return;
     }
+    // Feedback esplicito: se 0, l'operatore corrente non possiede quelle chat.
+    let deleted = null;
+    try { deleted = (await res.json()).deleted; } catch (e) { /* risposta senza corpo */ }
     currentConversationId = null;
     clearChatHistory();
     try { await createConversation(); } catch (e) { await loadConversations(); }
+    if (deleted === 0) {
+        addMessage(`Nessuna conversazione eliminata: l'operatore corrente è `
+            + `**${getOperatorId()}** e non possiede conversazioni. `
+            + `Se ti aspettavi di trovarne, rifai il login da index.html.`, 'ai');
+    } else if (deleted !== null) {
+        addMessage(`Archivio svuotato: ${deleted} conversazioni eliminate.`, 'ai');
+    }
 }
 
 async function initConversations() {
