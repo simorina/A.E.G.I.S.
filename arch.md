@@ -40,7 +40,7 @@ Ogni modulo ha una responsabilità singola e un'interfaccia netta; le funzioni p
 | `safety.py` | Guardrail SQL: `extract_sql` (parsing) + `validate_readonly_sql` (validazione statica). |
 | `geocode.py` | Geocoding via Nominatim/OSM diretto (`geocode` → nome/lat/lon/**geometria reale**, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
 | `geometry.py` | Helper geometrie: `feature_collection` (wrap GeoJSON) + `buffer_geometry` (buffer metrico in UTM). |
-| `overpass.py` | `fetch_street` (via intera) + `fetch_streets` (batch, 1 query) + `resolve_place` (ibrido Nominatim+Overpass). Throttle ~1/s + retry contro il rate-limit. |
+| `overpass.py` | `fetch_street` (via intera, case-insensitive) + `fetch_streets` (batch con **fuzzy match** sui nomi reali) + `resolve_place` (ibrido Nominatim+Overpass). **Cache** di sessione, throttle ~1/s e retry contro il rate-limit. |
 | `prompts.py` | Tutti i prompt spezzati: system dell'agente, template SQL / geometry / spatial, grounding, vision, briefing. Schema **iniettato** da `Config.SCHEMA`. |
 | `tools.py` | `run_sql_pipeline` (condivisa) + `make_graph_tools` (i tool del grafo) + `request_clarification` + `make_tools` (legacy fallback). |
 | `graph.py` | Il **`StateGraph`**: stato, nodi (`agent`/`tools`/`clarify`/`ground`), routing. |
@@ -231,8 +231,8 @@ Operatore  →  aegis.html (session_id, markdown render)
 ## 12. Limiti noti
 
 - **Attributi non presenti nel DB** (es. vie *"più trafficate"*, *"più importanti"*): il DB contiene solo fermate metro, parchi e ospedali di Milano. Domande su traffico/importanza → la **scelta dei luoghi è una stima dell'LLM**, non fondata su dati, e il nodo `ground` non può verificarla.
-- **Match esatto dei nomi (Overpass)**: `trace_streets`/`fetch_street` cercano il tag `name` OSM **esatto**; nomi leggermente diversi vengono **saltati** (elencati nel `summary`). Nessun fuzzy matching.
-- **Overpass pubblico**: soggetto a rate-limit. Mitigato da **throttle ~1/s**, **retry con backoff** e **batch** (una query per più vie). Se bloccato → fallback al tratto di Nominatim.
+- **Nomi delle vie (Overpass)**: `trace_streets` fa **fuzzy match** sui nomi reali della vista (difflib, soglia 0.8) — tollera maiuscole e piccole differenze (*"Corso Vittorio Emanuele"* → *"Corso Vittorio Emanuele Secondo"*). Nomi troppo diversi restano fuori (elencati nel `summary`); il fuzzy è limitato al **bbox della vista**.
+- **Overpass pubblico**: soggetto a rate-limit. Mitigato da **cache di sessione**, **throttle ~1/s**, **retry con backoff** e **batch** (una query per le geometrie). Se bloccato → fallback al tratto di Nominatim. La prima query dei nomi su un bbox ampio può richiedere ~20-30 s; le successive sono immediate (cache).
 - **DB spento**: i tool geo (`locate_place`/`buffer_around`/`trace_streets`) e la vision **funzionano** anche senza DB. Solo i tool SQL (`query_intel`/`spatial_analysis`/`draw_geometry`, che valutano PostGIS) rispondono `DATABASE_OFFLINE` in modo pulito.
 - **Tool-calling del modello**: il grafo assume che `TEXT_MODEL` supporti il tool-calling nativo; con `AGENT_TOOL_CALLING=off` si passa all'orchestratore imperativo di fallback (senza i tool geo).
 - **Vision**: richiede un `VISION_MODEL` multimodale.
