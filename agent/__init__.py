@@ -151,7 +151,8 @@ _orchestrator = Orchestrator(
 )
 
 
-def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, viewport=None):
+def run(message, session_id, image=None, mime_type="image/jpeg", resume=None,
+        viewport=None, conversation_id=None):
     # Nessuna guardia offline a livello di run(): i tool geo/vision funzionano senza DB;
     # i soli tool SQL degradano puliti (DATABASE_OFFLINE) via execute_sql=None.
 
@@ -164,12 +165,13 @@ def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, vi
         text = _analyze_image(image, message or "", mime_type)
         return {"text": text, "geojson": None, "awaiting_input": False}
 
-    cfg = {"configurable": {"thread_id": session_id}, "recursion_limit": config.recursion_limit}
+    thread_id = conversation_id or session_id
+    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": config.recursion_limit}
 
     if resume is not None:
         inp = Command(resume=resume)
     else:
-        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id,
+        inp = {"messages": [HumanMessage(content=message)], "session_id": thread_id,
                "geojson": RESET_GEOJSON, "viewport": viewport}
 
     # La vista corrente è disponibile ai tool (geocode_place) per il turno.
