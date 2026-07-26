@@ -158,18 +158,43 @@ async def chat_endpoint(request: ChatRequest):
             print(f"Vision Error: {e}")
             raise HTTPException(status_code=400, detail="Invalid image payload.")
 
+    conversation_id = request.conversation_id
+    persist = conversation_id is not None and agent.engine is not None
+
+    if persist and request.message:
+        try:
+            convo.append_message(agent.engine, agent.config.schema,
+                                 conversation_id, "user", request.message)
+        except Exception as e:  # noqa: BLE001 - la persistenza non deve bloccare la chat
+            print(f"Persist user message failed: {e}")
+            persist = False
+
     try:
-        return agent.run(
+        result = agent.run(
             message=request.message,
             session_id=session_id,
             image=image_bytes,
             mime_type=mime_type,
             resume=request.resume,
             viewport=request.viewport,
+            conversation_id=conversation_id,
         )
     except Exception as e:
         print(f"Chat Error: {e}")
         return {"text": f"SYSTEM_FAILURE: {e}", "geojson": None, "awaiting_input": False}
+
+    if persist:
+        try:
+            convo.append_message(agent.engine, agent.config.schema, conversation_id,
+                                 "assistant", result.get("text", ""), result.get("geojson"))
+            current = convo.get_conversation(agent.engine, agent.config.schema, conversation_id)
+            if current and current["title"] == convo.DEFAULT_TITLE and request.message:
+                convo.rename_conversation(agent.engine, agent.config.schema, conversation_id,
+                                          convo.derive_title(request.message))
+        except Exception as e:  # noqa: BLE001
+            print(f"Persist assistant message failed: {e}")
+
+    return result
 
 @app.post("/api/scan")
 async def scan_endpoint(request: ScanRequest):
