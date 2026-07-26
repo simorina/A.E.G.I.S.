@@ -71,6 +71,113 @@ function getSessionId() {
     return id;
 }
 
+// --- CONVERSAZIONI ---
+const API_BASE = 'http://localhost:8000';
+let currentConversationId = null;
+
+function getOperatorId() {
+    return localStorage.getItem('aegis_operator_id') || 'ANONYMOUS';
+}
+
+async function createConversation() {
+    const res = await fetch(`${API_BASE}/api/conversations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator_id: getOperatorId() })
+    });
+    if (!res.ok) throw new Error('create failed');
+    const conv = await res.json();
+    currentConversationId = conv.id;
+    clearChatHistory();
+    await loadConversations();
+    return conv;
+}
+
+function clearChatHistory() {
+    const history = document.getElementById('chat-history');
+    if (history) history.innerHTML = '';
+    awaitingClarification = false;
+}
+
+async function loadConversations() {
+    const list = document.getElementById('conversation-list');
+    if (!list) return;
+    let items = [];
+    try {
+        const res = await fetch(`${API_BASE}/api/conversations?operator_id=${encodeURIComponent(getOperatorId())}`);
+        if (!res.ok) throw new Error('list failed');
+        items = await res.json();
+    } catch (e) {
+        list.innerHTML = '<div class="text-[10px] text-amber-500/50 font-mono px-2">ARCHIVIO NON DISPONIBILE</div>';
+        return;
+    }
+    list.innerHTML = '';
+    items.forEach(conv => {
+        const row = document.createElement('div');
+        row.className = 'conversation-item' + (conv.id === currentConversationId ? ' active' : '');
+        row.innerHTML = `<span class="title"></span>
+            <span class="actions">
+                <button type="button" data-act="rename" title="Rinomina">✎</button>
+                <button type="button" data-act="delete" title="Elimina">🗑</button>
+            </span>`;
+        row.querySelector('.title').innerText = conv.title;
+        row.addEventListener('click', (ev) => {
+            const act = ev.target.dataset ? ev.target.dataset.act : null;
+            if (act === 'rename') { ev.stopPropagation(); renameConversation(conv.id, conv.title); }
+            else if (act === 'delete') { ev.stopPropagation(); deleteConversation(conv.id); }
+            else { openConversation(conv.id); }
+        });
+        list.appendChild(row);
+    });
+}
+
+async function openConversation(id) {
+    try {
+        const res = await fetch(`${API_BASE}/api/conversations/${id}/messages`);
+        if (!res.ok) throw new Error('messages failed');
+        const msgs = await res.json();
+        currentConversationId = id;
+        clearChatHistory();
+        msgs.forEach(m => addMessage(m.content, m.role === 'user' ? 'user' : 'ai'));
+        await loadConversations();
+    } catch (e) {
+        addMessage('ARCHIVIO NON DISPONIBILE: impossibile aprire la conversazione.', 'ai');
+    }
+}
+
+async function renameConversation(id, currentTitle) {
+    const title = prompt('Nuovo titolo:', currentTitle);
+    if (title === null) return;
+    if (!title.trim()) return;
+    await fetch(`${API_BASE}/api/conversations/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim() })
+    });
+    await loadConversations();
+}
+
+async function deleteConversation(id) {
+    if (!confirm('Eliminare questa conversazione?')) return;
+    await fetch(`${API_BASE}/api/conversations/${id}`, { method: 'DELETE' });
+    if (id === currentConversationId) {
+        currentConversationId = null;
+        clearChatHistory();
+    }
+    await loadConversations();
+}
+
+async function initConversations() {
+    const btn = document.getElementById('new-chat-btn');
+    if (btn) btn.addEventListener('click', () => createConversation().catch(() => {}));
+    await loadConversations();
+    if (!currentConversationId) {
+        try { await createConversation(); } catch (e) { /* DB offline: chat effimera */ }
+    }
+}
+
+initConversations();
+
 // --- Stato human-in-the-loop: true quando l'agente attende un chiarimento ---
 let awaitingClarification = false;
 
@@ -199,7 +306,8 @@ async function sendMessage() {
             image_name: pendingAttachment ? pendingAttachment.name : null,
             session_id: getSessionId(),
             resume: awaitingClarification ? message : null,
-            viewport: viewport
+            viewport: viewport,
+            conversation_id: currentConversationId,
         };
 
         // C. Chiamata API
@@ -221,6 +329,7 @@ async function sendMessage() {
 
         // E-bis. Aggiorna lo stato di attesa chiarimento (human-in-the-loop)
         awaitingClarification = Boolean(data.awaiting_input);
+        loadConversations();   // il titolo può essere appena stato generato
 
         // F. Disegna Dati su Mappa se presenti
         if (data.geojson) {
