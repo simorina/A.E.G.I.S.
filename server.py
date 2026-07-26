@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import base64
+import uuid
 from sqlalchemy import text
 from io import BytesIO
 from PIL import Image
@@ -83,28 +84,28 @@ async def list_conversations_endpoint(operator_id: str):
 
 
 @app.get("/api/conversations/{conversation_id}/messages")
-async def conversation_messages_endpoint(conversation_id: str):
+async def conversation_messages_endpoint(conversation_id: uuid.UUID):
     engine, schema = _require_db()
-    if convo.get_conversation(engine, schema, conversation_id) is None:
+    if convo.get_conversation(engine, schema, str(conversation_id)) is None:
         raise HTTPException(status_code=404, detail="Conversazione non trovata.")
-    return convo.get_messages(engine, schema, conversation_id)
+    return convo.get_messages(engine, schema, str(conversation_id))
 
 
 @app.patch("/api/conversations/{conversation_id}")
-async def rename_conversation_endpoint(conversation_id: str, req: ConversationRename):
+async def rename_conversation_endpoint(conversation_id: uuid.UUID, req: ConversationRename):
     engine, schema = _require_db()
     title = req.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="Titolo vuoto.")
-    if not convo.rename_conversation(engine, schema, conversation_id, title[:120]):
+    if not convo.rename_conversation(engine, schema, str(conversation_id), title[:120]):
         raise HTTPException(status_code=404, detail="Conversazione non trovata.")
     return {"status": "ok"}
 
 
 @app.delete("/api/conversations/{conversation_id}")
-async def delete_conversation_endpoint(conversation_id: str):
+async def delete_conversation_endpoint(conversation_id: uuid.UUID):
     engine, schema = _require_db()
-    if not convo.delete_conversation(engine, schema, conversation_id):
+    if not convo.delete_conversation(engine, schema, str(conversation_id)):
         raise HTTPException(status_code=404, detail="Conversazione non trovata.")
     return {"status": "ok"}
 

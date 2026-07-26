@@ -249,3 +249,5 @@ La sidebar permette di creare, elencare, aprire, rinominare ed eliminare le conv
 - **Vision**: richiede un `VISION_MODEL` multimodale.
 - **`operator_id` non è verificato**: separa le conversazioni per operatore ma, senza autenticazione reale, un client può richiedere l'elenco di un altro `operator_id`. L'auth (JWT/sessioni) resta una feature a parte.
 - **Riapertura chat**: vengono ricaricati i messaggi, non i layer GeoJSON storici sulla mappa (il GeoJSON è salvato ma non ridisegnato).
+- **Checkpointer Postgres**: usa una singola connessione tenuta aperta per la vita del processo (operazioni serializzate da un lock) e non viene ri-aperta se Postgres riparte: in quel caso serve un riavvio dell'app. Adeguato alla scala demo; per più operatori concorrenti servirebbe un `ConnectionPool`.
+- **Turno solo-immagine**: se il messaggio è vuoto e c'è solo un'immagine, la risposta dell'agente viene salvata ma non il messaggio utente, e il titolo non viene derivato da quel turno.

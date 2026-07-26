@@ -149,20 +149,30 @@ async function renameConversation(id, currentTitle) {
     const title = prompt('Nuovo titolo:', currentTitle);
     if (title === null) return;
     if (!title.trim()) return;
-    await fetch(`${API_BASE}/api/conversations/${id}`, {
+    const res = await fetch(`${API_BASE}/api/conversations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: title.trim() })
     });
+    if (!res.ok) {
+        addMessage('ARCHIVIO NON DISPONIBILE: impossibile rinominare la conversazione.', 'ai');
+        return;
+    }
     await loadConversations();
 }
 
 async function deleteConversation(id) {
     if (!confirm('Eliminare questa conversazione?')) return;
-    await fetch(`${API_BASE}/api/conversations/${id}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/api/conversations/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+        addMessage('ARCHIVIO NON DISPONIBILE: impossibile eliminare la conversazione.', 'ai');
+        return;
+    }
     if (id === currentConversationId) {
         currentConversationId = null;
         clearChatHistory();
+        try { await createConversation(); } catch (e) { /* DB offline: chat effimera */ }
+        return;   // createConversation() already reloads the list
     }
     await loadConversations();
 }
