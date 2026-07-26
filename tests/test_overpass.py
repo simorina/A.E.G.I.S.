@@ -1,4 +1,17 @@
-from agent.overpass import fetch_street, fetch_streets, resolve_place, bbox_from_viewport
+import pytest
+
+from agent import overpass as ov
+from agent.overpass import (fetch_street, fetch_streets, resolve_place, bbox_from_viewport,
+                            _match_names, _street_names_in_bbox)
+
+
+@pytest.fixture(autouse=True)
+def _clean_overpass_state():
+    """Ogni test parte con cache vuota e throttle azzerato."""
+    ov._cache.clear()
+    ov._state["last"] = 0.0
+    yield
+    ov._cache.clear()
 
 
 class FakeHttpPost:
@@ -6,8 +19,10 @@ class FakeHttpPost:
         self.result = result
         self.raises = raises
         self.last = None
+        self.calls = 0
 
     def __call__(self, url, data, headers, timeout):
+        self.calls += 1
         self.last = {"url": url, "data": data, "headers": headers, "timeout": timeout}
         if self.raises:
             raise self.raises
@@ -49,12 +64,77 @@ def test_fetch_street_exception_returns_none():
                         http_post=FakeHttpPost(raises=RuntimeError("rate")), sleep=_noop) is None
 
 
-def test_fetch_street_query_contains_name_and_bbox():
+def test_fetch_street_query_is_case_insensitive_and_has_bbox():
     http = FakeHttpPost(result=OVERPASS_WAYS)
     fetch_street("Via X", (45.4, 9.1, 45.5, 9.2), http_post=http, sleep=_noop)
     q = http.last["data"]["data"]
-    assert 'name"="Via X"' in q
+    assert '"name"~"^Via X$",i' in q
     assert "45.4,9.1,45.5,9.2" in q
+
+
+# --- cache ---
+
+def test_cache_avoids_second_http_call():
+    http = FakeHttpPost(result=OVERPASS_WAYS)
+    bbox = (45.4, 9.1, 45.5, 9.2)
+    fetch_street("Via X", bbox, http_post=http, sleep=_noop)
+    fetch_street("Via X", bbox, http_post=http, sleep=_noop)
+    assert http.calls == 1  # la seconda volta arriva dalla cache
+
+
+def test_failures_are_not_cached():
+    calls = {"n": 0}
+
+    def flaky(url, data, headers, timeout):
+        calls["n"] += 1
+        if calls["n"] <= 3:      # primo fetch: 1 tentativo + 2 retry -> fallisce
+            raise RuntimeError("429")
+        return OVERPASS_WAYS
+
+    bbox = (45.4, 9.1, 45.5, 9.2)
+    assert fetch_street("Via X", bbox, http_post=flaky, sleep=_noop) is None
+    g = fetch_street("Via X", bbox, http_post=flaky, sleep=_noop)
+    assert g is not None  # il fallimento non era in cache: ritenta e riesce
+
+
+# --- fuzzy match ---
+
+def test_match_names_handles_case_and_small_differences():
+    available = ["Corso Vittorio Emanuele II", "Via Dante", "Corso Buenos Aires"]
+    out = _match_names(["corso vittorio emanuele", "VIA DANTE"], available)
+    assert out["corso vittorio emanuele"] == "Corso Vittorio Emanuele II"
+    assert out["VIA DANTE"] == "Via Dante"
+
+
+def test_match_names_drops_unrelated():
+    assert _match_names(["Piazza Inesistente"], ["Via Dante"]) == {}
+
+
+def test_street_names_in_bbox_parses_tags():
+    data = {"elements": [
+        {"type": "way", "tags": {"name": "Via A"}},
+        {"type": "way", "tags": {"name": "Via B"}},
+        {"type": "way", "tags": {}},
+    ]}
+    names = _street_names_in_bbox((0, 0, 1, 1), FakeHttpPost(result=data), _noop)
+    assert names == ["Via A", "Via B"]
+
+
+def test_fetch_streets_fuzzy_matches_real_name():
+    """Il nome richiesto e' leggermente diverso: deve essere abbinato al nome OSM reale."""
+    names_resp = {"elements": [{"type": "way", "tags": {"name": "Corso Vittorio Emanuele II"}}]}
+    geom_resp = {"elements": [
+        {"type": "way", "tags": {"name": "Corso Vittorio Emanuele II"},
+         "geometry": [{"lat": 45.46, "lon": 9.19}, {"lat": 45.47, "lon": 9.20}]},
+    ]}
+
+    def fake(url, data, headers, timeout):
+        return names_resp if "out tags" in data["data"] else geom_resp
+
+    out = fetch_streets(["Corso Vittorio Emanuele"], (45.4, 9.1, 45.5, 9.2),
+                        http_post=fake, sleep=_noop)
+    assert list(out) == ["Corso Vittorio Emanuele II"]  # chiavato sul nome OSM reale
+    assert out["Corso Vittorio Emanuele II"]["type"] == "MultiLineString"
 
 
 def test_fetch_street_retries_on_error_then_succeeds():
@@ -91,19 +171,35 @@ OVERPASS_NAMED = {"elements": [
 ]}
 
 
-def test_fetch_streets_groups_by_name_in_single_query():
-    http = FakeHttpPost(result=OVERPASS_NAMED)
+def _batch_http(names_resp, geom_resp):
+    """Fake HTTP che distingue la query dei nomi (out tags) da quella delle geometrie (out geom)."""
+    calls = {"queries": []}
+
+    def post(url, data, headers, timeout):
+        q = data["data"]
+        calls["queries"].append(q)
+        return names_resp if "out tags" in q else geom_resp
+
+    post.calls = calls
+    return post
+
+
+def test_fetch_streets_groups_by_name_in_single_geometry_query():
+    names_resp = {"elements": [{"type": "way", "tags": {"name": "Via A"}},
+                               {"type": "way", "tags": {"name": "Via B"}}]}
+    http = _batch_http(names_resp, OVERPASS_NAMED)
     out = fetch_streets(["Via A", "Via B"], (45.4, 9.1, 45.5, 9.2), http_post=http, sleep=_noop)
     assert set(out) == {"Via A", "Via B"}
     assert out["Via A"]["type"] == "MultiLineString"
     assert len(out["Via A"]["coordinates"]) == 2  # due tratti di Via A
     assert len(out["Via B"]["coordinates"]) == 1
-    q = http.last["data"]["data"]
-    assert 'name"="Via A"' in q and 'name"="Via B"' in q  # UNA sola query con entrambe
+    geom_q = [q for q in http.calls["queries"] if "out geom" in q][-1]
+    assert 'name"="Via A"' in geom_q and 'name"="Via B"' in geom_q  # UNA query per le geometrie
 
 
 def test_fetch_streets_empty_returns_empty_dict():
-    out = fetch_streets(["X"], (0, 0, 1, 1), http_post=FakeHttpPost(result={"elements": []}), sleep=_noop)
+    out = fetch_streets(["X"], (0, 0, 1, 1),
+                        http_post=FakeHttpPost(result={"elements": []}), sleep=_noop)
     assert out == {}
 
 
