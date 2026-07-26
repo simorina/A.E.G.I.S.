@@ -871,11 +871,16 @@ html, body {
 .btn-execute:hover { background: #fbbf24; }
 .btn-execute:active { transform: scale(0.96); }
 
-.btn-recon {
+/* NB: `.btn-recon` (sez. 9) e' il pulsante FLOTTANTE sulla mappa
+   (position: fixed). Questo e' il pulsante IN-SIDEBAR: nome diverso per
+   non ereditare il posizionamento fisso, che lo faceva sovrapporre al
+   composer. */
+.btn-scan {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: var(--sp-2);
+    width: 100%;
     min-height: 44px;
     background: transparent;
     border: 1px solid rgba(245, 158, 11, 0.35);
@@ -888,7 +893,7 @@ html, body {
     cursor: pointer;
     transition: background 0.18s ease, border-color 0.18s ease;
 }
-.btn-recon:hover {
+.btn-scan:hover {
     background: rgba(245, 158, 11, 0.12);
     border-color: var(--amber);
 }
