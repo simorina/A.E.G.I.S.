@@ -103,6 +103,7 @@
                     setTimeout(() => {
                         // Salva il token se vuoi usarlo nelle altre pagine
                         sessionStorage.setItem('intel_token', data.token);
+                        localStorage.setItem('aegis_operator_id', operatorId);
                         // Reindirizza alla dashboard (crea questo file o cambia destinazione)
                         window.location.href = 'aegis.html'; 
                     }, 1500);
