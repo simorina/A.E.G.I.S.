@@ -120,12 +120,29 @@ _graph_tools = make_graph_tools(
 
 
 def build_checkpointer(db_uri):
-    """Checkpointer persistente su Postgres; fallback a MemorySaver se non disponibile."""
+    """Checkpointer persistente su Postgres; fallback a MemorySaver se non disponibile.
+
+    Usa un ConnectionPool invece di una singola connessione tenuta aperta per la
+    vita del processo: quest'ultima, se cade (riavvio di Postgres, timeout, rete),
+    resta chiusa per sempre e ogni turno fallisce con "the connection is closed"
+    finche' non si riavvia l'app. Il pool riapre le connessioni da solo e
+    `check=ConnectionPool.check_connection` scarta quelle morte prima dell'uso.
+    """
     if db_uri:
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
-            saver_cm = PostgresSaver.from_conn_string(db_uri)
-            saver = saver_cm.__enter__()   # tenuto aperto per la vita del processo
+            from psycopg.rows import dict_row
+            from psycopg_pool import ConnectionPool
+
+            pool = ConnectionPool(
+                conninfo=db_uri,
+                min_size=1,
+                max_size=5,
+                open=True,
+                check=ConnectionPool.check_connection,   # scarta le connessioni morte
+                kwargs={"autocommit": True, "row_factory": dict_row},
+            )
+            saver = PostgresSaver(pool)
             saver.setup()
             return saver, "postgres"
         except Exception as exc:  # noqa: BLE001 - dipendenza assente o DB irraggiungibile
