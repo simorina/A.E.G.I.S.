@@ -3,12 +3,14 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import base64
+import uuid
 from sqlalchemy import text
 from io import BytesIO
 from PIL import Image
 import contextily as ctx
 
 import agent
+from agent import conversations as convo
 
 app = FastAPI(title="Tactical Sat-Link API")
 
@@ -26,6 +28,16 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     resume: str | None = None
     viewport: dict | None = None
+    conversation_id: str | None = None
+
+
+class ConversationCreate(BaseModel):
+    operator_id: str
+
+
+class ConversationRename(BaseModel):
+    title: str
+
 
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
@@ -52,6 +64,51 @@ def decode_image_payload(image_data: str) -> tuple[bytes, str]:
         return base64.b64decode(payload), mime_type
 
 # --- ENDPOINTS ---
+
+def _require_db():
+    if agent.engine is None:
+        raise HTTPException(status_code=503, detail="Database offline: conversazioni non disponibili.")
+    return agent.engine, agent.config.schema
+
+
+@app.post("/api/conversations")
+async def create_conversation_endpoint(req: ConversationCreate):
+    engine, schema = _require_db()
+    return convo.create_conversation(engine, schema, req.operator_id)
+
+
+@app.get("/api/conversations")
+async def list_conversations_endpoint(operator_id: str):
+    engine, schema = _require_db()
+    return convo.list_conversations(engine, schema, operator_id)
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+async def conversation_messages_endpoint(conversation_id: uuid.UUID):
+    engine, schema = _require_db()
+    if convo.get_conversation(engine, schema, str(conversation_id)) is None:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return convo.get_messages(engine, schema, str(conversation_id))
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def rename_conversation_endpoint(conversation_id: uuid.UUID, req: ConversationRename):
+    engine, schema = _require_db()
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Titolo vuoto.")
+    if not convo.rename_conversation(engine, schema, str(conversation_id), title[:120]):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "ok"}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation_endpoint(conversation_id: uuid.UUID):
+    engine, schema = _require_db()
+    if not convo.delete_conversation(engine, schema, str(conversation_id)):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "ok"}
+
 
 @app.post("/api/login")
 async def login_endpoint(creds: LoginRequest):
@@ -102,18 +159,43 @@ async def chat_endpoint(request: ChatRequest):
             print(f"Vision Error: {e}")
             raise HTTPException(status_code=400, detail="Invalid image payload.")
 
+    conversation_id = request.conversation_id
+    persist = conversation_id is not None and agent.engine is not None
+
+    if persist and request.message:
+        try:
+            convo.append_message(agent.engine, agent.config.schema,
+                                 conversation_id, "user", request.message)
+        except Exception as e:  # noqa: BLE001 - la persistenza non deve bloccare la chat
+            print(f"Persist user message failed: {e}")
+            persist = False
+
     try:
-        return agent.run(
+        result = agent.run(
             message=request.message,
             session_id=session_id,
             image=image_bytes,
             mime_type=mime_type,
             resume=request.resume,
             viewport=request.viewport,
+            conversation_id=conversation_id,
         )
     except Exception as e:
         print(f"Chat Error: {e}")
         return {"text": f"SYSTEM_FAILURE: {e}", "geojson": None, "awaiting_input": False}
+
+    if persist:
+        try:
+            convo.append_message(agent.engine, agent.config.schema, conversation_id,
+                                 "assistant", result.get("text", ""), result.get("geojson"))
+            current = convo.get_conversation(agent.engine, agent.config.schema, conversation_id)
+            if current and current["title"] == convo.DEFAULT_TITLE and request.message:
+                convo.rename_conversation(agent.engine, agent.config.schema, conversation_id,
+                                          convo.derive_title(request.message))
+        except Exception as e:  # noqa: BLE001
+            print(f"Persist assistant message failed: {e}")
+
+    return result
 
 @app.post("/api/scan")
 async def scan_endpoint(request: ScanRequest):

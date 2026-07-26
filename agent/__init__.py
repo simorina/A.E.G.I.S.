@@ -9,6 +9,7 @@ from langgraph.types import Command
 from langchain_core.messages import HumanMessage
 
 from .config import load_config
+from .conversations import ensure_schema
 from .db import make_engine, make_sql_database, get_table_info, execute_readonly
 from .geojson import RESET_GEOJSON
 from .geocode import current_viewport
@@ -42,6 +43,12 @@ except Exception as exc:  # noqa: BLE001
     log.error("DB init failed: %s", exc)
     engine = None
     _table_info = ""
+
+if engine is not None:
+    try:
+        ensure_schema(engine, config.schema)
+    except Exception as exc:  # noqa: BLE001 - non bloccare l'avvio
+        log.error("ensure_schema failed: %s", exc)
 
 _query_chain = (ChatPromptTemplate.from_template(sql_query_template(config.schema))
                 | text_llm | StrOutputParser())
@@ -111,8 +118,26 @@ _graph_tools = make_graph_tools(
     geocode_fn=resolve_place,
 ) + [request_clarification]
 
+
+def build_checkpointer(db_uri):
+    """Checkpointer persistente su Postgres; fallback a MemorySaver se non disponibile."""
+    if db_uri:
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver
+            saver_cm = PostgresSaver.from_conn_string(db_uri)
+            saver = saver_cm.__enter__()   # tenuto aperto per la vita del processo
+            saver.setup()
+            return saver, "postgres"
+        except Exception as exc:  # noqa: BLE001 - dipendenza assente o DB irraggiungibile
+            log.warning("Postgres checkpointer non disponibile (%s); uso MemorySaver", exc)
+    return MemorySaver(), "memory"
+
+
+_checkpointer, _checkpointer_kind = build_checkpointer(config.db_uri if engine is not None else None)
+log.info("Checkpointer: %s", _checkpointer_kind)
+
 _graph = build_graph(llm=text_llm, tools=_graph_tools, ground_fn=_ground,
-                     checkpointer=MemorySaver())
+                     checkpointer=_checkpointer)
 
 
 _orchestrator = Orchestrator(
@@ -126,7 +151,8 @@ _orchestrator = Orchestrator(
 )
 
 
-def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, viewport=None):
+def run(message, session_id, image=None, mime_type="image/jpeg", resume=None,
+        viewport=None, conversation_id=None):
     # Nessuna guardia offline a livello di run(): i tool geo/vision funzionano senza DB;
     # i soli tool SQL degradano puliti (DATABASE_OFFLINE) via execute_sql=None.
 
@@ -139,12 +165,13 @@ def run(message, session_id, image=None, mime_type="image/jpeg", resume=None, vi
         text = _analyze_image(image, message or "", mime_type)
         return {"text": text, "geojson": None, "awaiting_input": False}
 
-    cfg = {"configurable": {"thread_id": session_id}, "recursion_limit": config.recursion_limit}
+    thread_id = conversation_id or session_id
+    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": config.recursion_limit}
 
     if resume is not None:
         inp = Command(resume=resume)
     else:
-        inp = {"messages": [HumanMessage(content=message)], "session_id": session_id,
+        inp = {"messages": [HumanMessage(content=message)], "session_id": thread_id,
                "geojson": RESET_GEOJSON, "viewport": viewport}
 
     # La vista corrente è disponibile ai tool (geocode_place) per il turno.

@@ -111,6 +111,30 @@ INSERT INTO schema1.hospitals (name, type, longitude, latitude) VALUES
     ('Istituto Nazionale dei Tumori',     'Oncology',    9.2300, 45.4750);
 
 -- ---------------------------------------------------------------------
+-- CONVERSATIONS / MESSAGES  (chat salvate per operatore)
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schema1.conversations (
+    id          UUID PRIMARY KEY,
+    operator_id VARCHAR(64)  NOT NULL,
+    title       VARCHAR(120) NOT NULL,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS conversations_operator_idx
+    ON schema1.conversations (operator_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS schema1.messages (
+    id              BIGSERIAL PRIMARY KEY,
+    conversation_id UUID NOT NULL REFERENCES schema1.conversations(id) ON DELETE CASCADE,
+    role            VARCHAR(16) NOT NULL,
+    content         TEXT NOT NULL,
+    geojson         TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS messages_conversation_idx
+    ON schema1.messages (conversation_id, id);
+
+-- ---------------------------------------------------------------------
 -- Sanity: report what was created
 -- ---------------------------------------------------------------------
 DO $$

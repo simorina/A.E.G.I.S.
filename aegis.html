@@ -30,7 +30,15 @@
                 </h1>
                 <div class="text-[10px] text-amber-500/60 font-mono tracking-[0.2em]">ENCRYPTED CONNECTION</div>
             </div>
-            
+
+            <div class="mb-4">
+                <button id="new-chat-btn" type="button"
+                        class="w-full bg-amber-600/20 hover:bg-amber-600/40 border border-amber-500/40 text-amber-400 py-2 mb-2 uppercase font-['Chakra_Petch'] text-xs tracking-widest transition-colors">
+                    + NUOVA CHAT
+                </button>
+                <div id="conversation-list" class="conversation-list space-y-1 max-h-40 overflow-y-auto scrollbar-custom"></div>
+            </div>
+
             <div id="chat-history" class="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 scrollbar-custom">
                 <div class="bg-amber-500/5 border-l-2 border-amber-500 p-3 text-sm text-gray-300 font-['Chakra_Petch']">
                     <strong class="text-amber-500">SYSTEM:</strong> TERMINAL READY. AWAITING TARGET COORDINATES.

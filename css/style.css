@@ -527,7 +527,7 @@ html, body {
 /* Landscape Mobile (Rotazione) */
 @media screen and (max-height: 500px) and (orientation: landscape) {
     .sidebar { width: 60%; overflow-y: auto; }
-    
+
     .btn-recon {
         /* In landscape lo spostiamo a lato per non coprire la mappa */
         left: auto;
@@ -538,3 +538,40 @@ html, body {
         padding: 10px 20px;
     }
 }
+
+/* --- Lista conversazioni (sidebar) --- */
+.conversation-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-left: 2px solid transparent;
+    cursor: pointer;
+    font-family: 'Chakra Petch', sans-serif;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+    transition: background 0.15s, border-color 0.15s;
+}
+.conversation-item:hover { background: rgba(245, 158, 11, 0.08); }
+.conversation-item.active {
+    background: rgba(245, 158, 11, 0.12);
+    border-left-color: var(--amber);
+    color: #fff;
+}
+.conversation-item .title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.conversation-item .actions { display: none; gap: 0.25rem; }
+.conversation-item:hover .actions { display: flex; }
+.conversation-item .actions button {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 0 0.15rem;
+}
+.conversation-item .actions button:hover { color: var(--amber); }
