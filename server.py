@@ -83,6 +83,13 @@ async def list_conversations_endpoint(operator_id: str):
     return convo.list_conversations(engine, schema, operator_id)
 
 
+@app.delete("/api/conversations")
+async def delete_all_conversations_endpoint(operator_id: str):
+    engine, schema = _require_db()
+    removed = convo.delete_all_conversations(engine, schema, operator_id)
+    return {"status": "ok", "deleted": removed}
+
+
 @app.get("/api/conversations/{conversation_id}/messages")
 async def conversation_messages_endpoint(conversation_id: uuid.UUID):
     engine, schema = _require_db()

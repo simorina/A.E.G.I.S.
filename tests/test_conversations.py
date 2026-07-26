@@ -34,6 +34,26 @@ def db():
     return agent.engine, agent.config.schema
 
 
+def test_delete_all_removes_only_that_operator(db):
+    from agent.conversations import (create_conversation, list_conversations,
+                                     append_message, get_messages, delete_all_conversations,
+                                     delete_conversation)
+    engine, schema = db
+    mine_a = create_conversation(engine, schema, "TEST_BULK_OP")
+    mine_b = create_conversation(engine, schema, "TEST_BULK_OP")
+    append_message(engine, schema, mine_a["id"], "user", "ciao")
+    other = create_conversation(engine, schema, "TEST_OTHER_OP")
+    try:
+        removed = delete_all_conversations(engine, schema, "TEST_BULK_OP")
+        assert removed == 2
+        assert list_conversations(engine, schema, "TEST_BULK_OP") == []
+        assert get_messages(engine, schema, mine_a["id"]) == []          # cascade
+        assert len(list_conversations(engine, schema, "TEST_OTHER_OP")) == 1  # non tocca gli altri
+        assert delete_all_conversations(engine, schema, "TEST_BULK_OP") == 0  # idempotente
+    finally:
+        delete_conversation(engine, schema, other["id"])
+
+
 def test_crud_roundtrip(db):
     from agent.conversations import (create_conversation, list_conversations, get_messages,
                                      append_message, rename_conversation, delete_conversation)

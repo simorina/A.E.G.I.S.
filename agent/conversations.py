@@ -118,6 +118,16 @@ def rename_conversation(engine, schema: str, conversation_id: str, title: str) -
     return result.rowcount > 0
 
 
+def delete_all_conversations(engine, schema: str, operator_id: str) -> int:
+    """Elimina TUTTE le conversazioni di un operatore (messaggi in cascade).
+    Ritorna quante ne sono state eliminate."""
+    with engine.begin() as conn:
+        result = conn.execute(text(
+            f"DELETE FROM {schema}.conversations WHERE operator_id = :operator_id"),
+            {"operator_id": operator_id})
+    return result.rowcount
+
+
 def delete_conversation(engine, schema: str, conversation_id: str) -> bool:
     with engine.begin() as conn:
         result = conn.execute(text(

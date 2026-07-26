@@ -211,9 +211,33 @@ function isArchiveOpen() {
     return toggle ? toggle.getAttribute('aria-expanded') === 'true' : false;
 }
 
+async function clearArchive() {
+    const count = document.getElementById('archive-count');
+    const total = count ? count.innerText : '?';
+    if (!confirm(`Eliminare TUTTE le conversazioni (${total})?\nL'operazione non è reversibile.`)) return;
+    let res;
+    try {
+        res = await fetch(`${API_BASE}/api/conversations?operator_id=${encodeURIComponent(getOperatorId())}`,
+                          { method: 'DELETE' });
+    } catch (e) {
+        addMessage('ARCHIVIO NON DISPONIBILE: impossibile svuotare l\'archivio.', 'ai');
+        return;
+    }
+    if (!res.ok) {
+        addMessage('ARCHIVIO NON DISPONIBILE: impossibile svuotare l\'archivio.', 'ai');
+        return;
+    }
+    currentConversationId = null;
+    clearChatHistory();
+    try { await createConversation(); } catch (e) { await loadConversations(); }
+}
+
 async function initConversations() {
     const btn = document.getElementById('new-chat-btn');
     if (btn) btn.addEventListener('click', () => createConversation().catch(() => {}));
+
+    const clearBtn = document.getElementById('clear-archive-btn');
+    if (clearBtn) clearBtn.addEventListener('click', () => clearArchive());
 
     const toggle = document.getElementById('archive-toggle');
     if (toggle) toggle.addEventListener('click', () => setArchiveOpen(!isArchiveOpen()));
