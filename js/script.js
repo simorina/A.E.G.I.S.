@@ -176,10 +176,10 @@ async function initConversations() {
     }
 }
 
-initConversations();
-
 // --- Stato human-in-the-loop: true quando l'agente attende un chiarimento ---
 let awaitingClarification = false;
+
+initConversations();
 
 function updateAttachmentBar() {
     const attachmentBar = document.getElementById('attachment-bar');
