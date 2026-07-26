@@ -41,6 +41,7 @@ Ogni modulo ha una responsabilità singola e un'interfaccia netta; le funzioni p
 | `geocode.py` | Geocoding via Nominatim/OSM diretto (`geocode` → nome/lat/lon/**geometria reale**, iniettabile) + `current_viewport` (ContextVar) per il bias sulla vista. |
 | `geometry.py` | Helper geometrie: `feature_collection` (wrap GeoJSON) + `buffer_geometry` (buffer metrico in UTM). |
 | `overpass.py` | `fetch_street` (via intera, case-insensitive) + `fetch_streets` (batch con **fuzzy match** sui nomi reali) + `resolve_place` (ibrido Nominatim+Overpass). **Cache** di sessione, throttle ~1/s e retry contro il rate-limit. |
+| `conversations.py` | Persistenza delle chat: CRUD conversazioni/messaggi in `schema1` + `derive_title` (titolo automatico). |
 | `prompts.py` | Tutti i prompt spezzati: system dell'agente, template SQL / geometry / spatial, grounding, vision, briefing. Schema **iniettato** da `Config.SCHEMA`. |
 | `tools.py` | `run_sql_pipeline` (condivisa) + `make_graph_tools` (i tool del grafo) + `request_clarification` + `make_tools` (legacy fallback). |
 | `graph.py` | Il **`StateGraph`**: stato, nodi (`agent`/`tools`/`clarify`/`ground`), routing. |
@@ -228,6 +229,16 @@ Operatore  →  aegis.html (session_id, markdown render)
 
 ---
 
+## 11-bis. Conversazioni persistenti
+
+Le chat sono salvate in due tabelle applicative (`schema1.conversations`, `schema1.messages`), create in modo idempotente all'avvio (`ensure_schema`). Ogni conversazione appartiene a un `operator_id` (quello del login) e ha un titolo generato dal primo messaggio (`derive_title`).
+
+Il **checkpointer** di LangGraph usa Postgres quando disponibile (`build_checkpointer`), con `thread_id = conversation_id`: contesto e chiarimenti in sospeso sopravvivono al riavvio del server. Se le dipendenze o il DB mancano, si degrada a `MemorySaver` (memoria volatile) senza bloccare l'app.
+
+La sidebar permette di creare, elencare, aprire, rinominare ed eliminare le conversazioni; `/api/chat` salva i messaggi e aggiorna il titolo al primo scambio.
+
+---
+
 ## 12. Limiti noti
 
 - **Attributi non presenti nel DB** (es. vie *"più trafficate"*, *"più importanti"*): il DB contiene solo fermate metro, parchi e ospedali di Milano. Domande su traffico/importanza → la **scelta dei luoghi è una stima dell'LLM**, non fondata su dati, e il nodo `ground` non può verificarla.
@@ -236,3 +247,5 @@ Operatore  →  aegis.html (session_id, markdown render)
 - **DB spento**: i tool geo (`locate_place`/`buffer_around`/`trace_streets`) e la vision **funzionano** anche senza DB. Solo i tool SQL (`query_intel`/`spatial_analysis`/`draw_geometry`, che valutano PostGIS) rispondono `DATABASE_OFFLINE` in modo pulito.
 - **Tool-calling del modello**: il grafo assume che `TEXT_MODEL` supporti il tool-calling nativo; con `AGENT_TOOL_CALLING=off` si passa all'orchestratore imperativo di fallback (senza i tool geo).
 - **Vision**: richiede un `VISION_MODEL` multimodale.
+- **`operator_id` non è verificato**: separa le conversazioni per operatore ma, senza autenticazione reale, un client può richiedere l'elenco di un altro `operator_id`. L'auth (JWT/sessioni) resta una feature a parte.
+- **Riapertura chat**: vengono ricaricati i messaggi, non i layer GeoJSON storici sulla mappa (il GeoJSON è salvato ma non ridisegnato).
