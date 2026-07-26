@@ -556,7 +556,8 @@ html, body {
     --text-1: #f5f5f4;                        /* primario   ~15:1 */
     --text-2: rgba(245, 245, 244, 0.72);      /* secondario ~7:1  */
     --text-3: rgba(245, 245, 244, 0.48);      /* terziario        */
-    --focus-ring: 0 0 0 2px #050505, 0 0 0 4px var(--amber);
+    /* Il focus usa `outline` (non partecipa al layout): vedi .sidebar-inner
+       :focus-visible. Un box-shadow esterno sfondava i contenitori stretti. */
 }
 
 .sr-only {
@@ -577,12 +578,17 @@ html, body {
     border-right: 1px solid var(--hairline);
 }
 
-/* Focus visibile ovunque (sostituisce il focus:outline-none rimosso) */
-.sidebar-inner :is(button, input, [tabindex]):focus-visible {
-    outline: none;
-    box-shadow: var(--focus-ring);
+/* Focus visibile ovunque (sostituisce il focus:outline-none rimosso).
+   `outline` invece di box-shadow: non partecipa al layout e non "sfonda"
+   i contenitori stretti come faceva l'anello da 4px sull'input. */
+.sidebar-inner :is(button, [tabindex]):focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
     border-radius: 2px;
 }
+/* L'input del composer NON prende il ring: lo mostra il contenitore
+   (.composer-field:focus-within), così l'anello resta dentro la sidebar. */
+.sidebar-inner input:focus-visible { outline: none; }
 
 /* --- ZONA 1: header --------------------------------------------------- */
 .sidebar-header { flex: none; }
@@ -742,10 +748,12 @@ html, body {
     transition: color 0.18s ease, background 0.18s ease;
     position: relative;
 }
-.btn-icon::after {                             /* hit area estesa a 44x44 */
+/* Hit area estesa (28 -> 44px) SOLO in verticale: in orizzontale invaderebbe
+   i pulsanti adiacenti nella barra archivio e nel composer. */
+.btn-icon::after {
     content: '';
     position: absolute;
-    inset: -8px;
+    inset: -8px 0;
 }
 .btn-icon:hover { color: var(--amber); background: var(--surface-2); }
 .btn-icon.is-danger:hover { color: #f87171; }
@@ -800,6 +808,7 @@ html, body {
     display: flex;
     flex-direction: column;
     gap: var(--sp-2);
+    min-width: 0;              /* evita che i figli sfondino la colonna */
 }
 .attachment-bar {
     display: flex;
@@ -821,16 +830,21 @@ html, body {
     align-items: center;
     gap: var(--sp-1);
     padding: var(--sp-1);
+    min-width: 0;
     background: var(--surface-1);
     border: 1px solid rgba(255, 255, 255, 0.12);
-    transition: border-color 0.18s ease;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
-.composer-field:focus-within { border-color: var(--amber); }
+/* Il focus si manifesta QUI (un solo bordo, dentro i limiti del contenitore) */
+.composer-field:focus-within {
+    border-color: var(--amber);
+    box-shadow: inset 0 0 0 1px var(--amber);
+}
 .composer-attach { flex: none; }
 .composer-input {
-    flex: 1;
-    min-width: 0;
-    min-height: 40px;
+    flex: 1 1 auto;
+    min-width: 0;              /* consente il restringimento: niente overflow */
+    height: 36px;              /* stessa altezza di attach ed execute */
     padding: 0 var(--sp-2);
     background: transparent;
     border: none;
@@ -838,14 +852,16 @@ html, body {
     color: var(--text-1);
     font-family: 'JetBrains Mono', 'VT323', monospace;
     font-size: 14px;
+    line-height: 36px;
 }
 .composer-input::placeholder { color: var(--text-3); }
+.composer-attach { width: 36px; height: 36px; }
 .btn-execute {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex: none;
-    width: 40px; height: 40px;
+    width: 36px; height: 36px;
     background: var(--amber);
     border: none;
     color: #050505;
