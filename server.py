@@ -9,6 +9,7 @@ from PIL import Image
 import contextily as ctx
 
 import agent
+from agent import conversations as convo
 
 app = FastAPI(title="Tactical Sat-Link API")
 
@@ -26,6 +27,16 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     resume: str | None = None
     viewport: dict | None = None
+    conversation_id: str | None = None
+
+
+class ConversationCreate(BaseModel):
+    operator_id: str
+
+
+class ConversationRename(BaseModel):
+    title: str
+
 
 class ScanRequest(BaseModel):
     west: float; south: float; east: float; north: float; zoom: int
@@ -52,6 +63,51 @@ def decode_image_payload(image_data: str) -> tuple[bytes, str]:
         return base64.b64decode(payload), mime_type
 
 # --- ENDPOINTS ---
+
+def _require_db():
+    if agent.engine is None:
+        raise HTTPException(status_code=503, detail="Database offline: conversazioni non disponibili.")
+    return agent.engine, agent.config.schema
+
+
+@app.post("/api/conversations")
+async def create_conversation_endpoint(req: ConversationCreate):
+    engine, schema = _require_db()
+    return convo.create_conversation(engine, schema, req.operator_id)
+
+
+@app.get("/api/conversations")
+async def list_conversations_endpoint(operator_id: str):
+    engine, schema = _require_db()
+    return convo.list_conversations(engine, schema, operator_id)
+
+
+@app.get("/api/conversations/{conversation_id}/messages")
+async def conversation_messages_endpoint(conversation_id: str):
+    engine, schema = _require_db()
+    if convo.get_conversation(engine, schema, conversation_id) is None:
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return convo.get_messages(engine, schema, conversation_id)
+
+
+@app.patch("/api/conversations/{conversation_id}")
+async def rename_conversation_endpoint(conversation_id: str, req: ConversationRename):
+    engine, schema = _require_db()
+    title = req.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Titolo vuoto.")
+    if not convo.rename_conversation(engine, schema, conversation_id, title[:120]):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "ok"}
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation_endpoint(conversation_id: str):
+    engine, schema = _require_db()
+    if not convo.delete_conversation(engine, schema, conversation_id):
+        raise HTTPException(status_code=404, detail="Conversazione non trovata.")
+    return {"status": "ok"}
+
 
 @app.post("/api/login")
 async def login_endpoint(creds: LoginRequest):
