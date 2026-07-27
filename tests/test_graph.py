@@ -100,3 +100,17 @@ def test_viewport_reaches_system_prompt():
     system = llm.seen_messages[0]
     assert "OPERATOR MAP VIEW" in system.content
     assert "45.46" in system.content
+
+
+def test_reset_sentinel_never_leaks_on_first_turn():
+    """Primo turno di un thread NUOVO: il canale geojson non ha valore precedente,
+    quindi LangGraph non invoca il reducer e scriverebbe il sentinella tale e quale.
+    Non deve mai uscire dal grafo."""
+    from agent.geojson import RESET_GEOJSON
+    llm = ScriptedLLM([AIMessage(content="ciao")])
+    graph = build_graph(llm=llm, tools=[fake_query], ground_fn=lambda d, data: d,
+                        checkpointer=MemorySaver())
+    out = graph.invoke({"messages": [("user", "ciao")], "geojson": RESET_GEOJSON,
+                        "session_id": "fresh", "viewport": None}, _cfg("fresh"))
+    assert out.get("geojson") != RESET_GEOJSON
+    assert out.get("geojson") is None

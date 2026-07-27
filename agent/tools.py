@@ -6,6 +6,12 @@ from .safety import extract_sql, validate_readonly_sql, UnsafeQueryError
 from .geocode import geocode, current_viewport, viewbox_from_viewport
 from .geometry import feature_collection, feature_collection_multi, buffer_geometry
 from .overpass import fetch_streets, bbox_from_viewport
+from .skills import (
+    spatial_code_interpreter,
+    analyze_multispectral_band,
+    get_tactical_weather,
+    calculate_elevation_profile
+)
 
 log = logging.getLogger(__name__)
 
@@ -123,7 +129,18 @@ def make_graph_tools(*, generate_query_sql, generate_geometry_sql, generate_spat
         return {"summary": f"TRACED {len(streets)} vie: {', '.join(streets)}",
                 "geojson": feature_collection_multi(pairs)}
 
-    return [query_intel, draw_geometry, spatial_analysis, locate_place, buffer_around, trace_streets]
+    return [
+        query_intel,
+        draw_geometry,
+        spatial_analysis,
+        locate_place,
+        buffer_around,
+        trace_streets,
+        spatial_code_interpreter,
+        analyze_multispectral_band,
+        get_tactical_weather,
+        calculate_elevation_profile
+    ]
 
 
 def make_tools(*, generate_query_sql, generate_geometry_sql, execute_sql,

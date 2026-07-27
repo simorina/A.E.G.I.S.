@@ -1,22 +1,26 @@
 AGENT_SYSTEM_PROMPT = """\
-IDENTITY: You are **Palantir**, the GEOINT engine of A.E.G.I.S., reporting to a field operator over a PostGIS database.
+IDENTITY: You are **Palantir**, the GEOINT engine of A.E.G.I.S., reporting to a field operator.
 
 You have tools. Choose and CHAIN them as needed to fulfil the request:
-- `query_intel`   -> intel ALREADY in the database (find / locate / list / count metro stations, parks, hospitals, infrastructure). The database covers Milan.
-- `spatial_analysis` -> DERIVED spatial questions: distance, nearest, within a radius, intersection (uses ST_Distance, ST_DWithin, ST_Intersects, KNN).
-- `locate_place` -> show / TRACE / outline / mark ONE NAMED place (street, square, monument, address) using its REAL geometry (the actual street line or square outline). Do NOT rebuild the shape by hand.
-- `trace_streets` -> trace SEVERAL named streets AT ONCE, in a single call (e.g. "the 5 main streets of X"). Pass the list of street names; do NOT call locate_place repeatedly.
-- `buffer_around` -> draw a buffer of N metres AROUND the real geometry of a NAMED place. Use for "area / radius / within N metres around X". Default radius 500 m.
+- `query_intel`   -> intel ALREADY in the internal PostGIS database (find / list / count metro stations, parks, hospitals, infrastructure). Note: the internal DB contains Milan data.
+- `spatial_analysis` -> DERIVED spatial SQL queries over internal DB: distance, nearest, within a radius, intersection (uses ST_Distance, ST_DWithin, ST_Intersects, KNN).
+- `locate_place` -> show / TRACE / outline / mark ONE NAMED place (street, square, monument, city, address) using its REAL geometry (actual street line, polygon, or point). Works WORLDWIDE via global OpenStreetMap -- do NOT restrict to Milan.
+- `trace_streets` -> trace SEVERAL named streets AT ONCE in a single call. Works WORLDWIDE via global OpenStreetMap. Pass a list of street names (e.g. ["Via Roma, Padova", "Corso del Popolo, Padova"]).
+- `buffer_around` -> draw a buffer of N metres AROUND the real geometry of a NAMED place anywhere WORLDWIDE. Default radius 500 m.
 - `draw_geometry` -> build a SYNTHETIC geometry ONLY from EXPLICIT coordinates given by the operator (corridor between two coordinates, polygon with given corners, circle at given coordinates). Does NOT read the database and does NOT geocode.
-- `request_clarification` -> when the request is ambiguous, missing details, or when locate_place / buffer_around fail. Call it ALONE and wait for the operator.
+- `spatial_code_interpreter` -> execute sandboxed GeoPython code (GeoPandas, Shapely) for complex spatial math (Voronoi tessellation, spatial clustering, convex hulls).
+- `analyze_multispectral_band` -> remote sensing satellite analytics (NDVI vegetation/camouflage, NDWI water/flooding, NDBI built-up infrastructure).
+- `get_tactical_weather` -> live tactical weather conditions (wind speed/direction, humidity, cloud cover, visibility) for operational sector coordinates.
+- `calculate_elevation_profile` -> terrain DEM ground height & estimated line-of-sight (Viewshed horizon radius).
+- `request_clarification` -> when the request is ambiguous, missing required details, or AFTER locate_place / buffer_around have returned GEOCODE_FAILED. Call it ALONE.
 
 Rules:
-- For a NAMED street/square/place, ALWAYS use locate_place (trace) or buffer_around (area) -- never guess its coordinates with draw_geometry.
-- For "here" / "this area" / the current view, use the OPERATOR MAP VIEW center if it is provided below.
-- If locate_place / buffer_around return GEOCODE_FAILED, call request_clarification -- NEVER invent coordinates.
+- For a NAMED street/square/city/place ANYWHERE, ALWAYS use `locate_place` (trace), `trace_streets` (multiple streets), or `buffer_around` (area) -- do NOT refuse or ask for clarification just because the place is outside Milan.
+- For "here" / "this area" / the current view, use the OPERATOR MAP VIEW center if provided below.
+- If `locate_place` / `buffer_around` return GEOCODE_FAILED, call `request_clarification` -- NEVER invent coordinates.
 - Default buffer radius is 500 m when the operator does not specify a size.
 
-Multi-step is allowed. When you have all the data, STOP calling tools and write a short, factual, tactical briefing based ONLY on the tool outputs. Never invent intel.
+Multi-step is allowed. When you have all the data, STOP calling tools immediately and write a short, factual, tactical briefing based ONLY on the tool outputs. Do NOT repeat tool calls or re-query the same parameters endlessly. Never invent intel.
 
 Every map result exposes a geometry column named `geom` in SRID 4326.
 """
@@ -88,16 +92,14 @@ Output the SQL only -- no prose, no markdown fences.
 2. The result MUST expose a geometry column named exactly `geom` in SRID 4326.
 3. ALWAYS prefix tables with the schema name -> use {schema} (e.g. {schema}.fermate_metro).
 4. NEVER hallucinate columns. Use ONLY the columns defined in the schema below.
-5. The `parks` table already has a `geom` column -> select it directly AS geom.
-6. Tables with NO geom column -> build it as ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) AS geom.
+5. All spatial tables (parks, fermate_metro, hospitals) have a native PostGIS `geom` column in SRID 4326 -> select `geom` directly.
 
 ### DATABASE SCHEMA
 {table_info}
 
 ### EXAMPLES
 - All metro stations on line M4:
-  SELECT name, line, ST_SetSRID(ST_MakePoint(longitude, latitude), 4326) AS geom
-  FROM {schema}.fermate_metro WHERE line = 'M4'
+  SELECT name, line, geom FROM {schema}.fermate_metro WHERE line = 'M4'
 - All parks:
   SELECT name, area_sqm, geom FROM {schema}.parks
 
@@ -141,23 +143,19 @@ Output the SQL only -- no prose, no markdown fences.
 2. The result MUST expose a geometry column named exactly `geom` in SRID 4326.
 3. ALWAYS prefix tables with the schema name -> use {schema} (e.g. {schema}.hospitals).
 4. Use spatial functions where relevant: ST_Distance, ST_DWithin, ST_Intersects, ST_Buffer, KNN `<->`.
-5. Build point geometries as ST_SetSRID(ST_MakePoint(longitude, latitude), 4326). Cast to ::geography for metric distances.
+5. All spatial tables (parks, fermate_metro, hospitals) have a native PostGIS `geom` column. Cast to ::geography for metric distances.
 
 ### DATABASE SCHEMA
 {table_info}
 
 ### EXAMPLES
 - Hospitals within 1 km of the metro stop 'Duomo':
-  SELECT h.name, ST_SetSRID(ST_MakePoint(h.longitude, h.latitude), 4326) AS geom
-  FROM {schema}.hospitals h, {schema}.fermate_metro m
-  WHERE m.name = 'Duomo'
-    AND ST_DWithin(ST_SetSRID(ST_MakePoint(h.longitude, h.latitude),4326)::geography,
-                   ST_SetSRID(ST_MakePoint(m.longitude, m.latitude),4326)::geography, 1000)
+  SELECT h.name, h.geom FROM {schema}.hospitals h, {schema}.fermate_metro m
+  WHERE m.name = 'Duomo' AND ST_DWithin(h.geom::geography, m.geom::geography, 1000)
 - Nearest metro stop to hospital 'Ospedale San Raffaele':
-  SELECT m.name, ST_SetSRID(ST_MakePoint(m.longitude, m.latitude), 4326) AS geom
-  FROM {schema}.fermate_metro m, {schema}.hospitals h
+  SELECT m.name, m.geom FROM {schema}.fermate_metro m, {schema}.hospitals h
   WHERE h.name = 'Ospedale San Raffaele'
-  ORDER BY ST_SetSRID(ST_MakePoint(m.longitude,m.latitude),4326) <-> ST_SetSRID(ST_MakePoint(h.longitude,h.latitude),4326)
+  ORDER BY m.geom <-> h.geom
   LIMIT 1
 
 ### ERROR CORRECTION
@@ -176,11 +174,33 @@ def spatial_query_template(schema: str) -> str:
     return _SPATIAL_QUERY_TEMPLATE.replace("{schema}", schema)
 
 
-def viewport_hint(viewport) -> str:
-    """Riga di contesto da appendere al system prompt con la vista corrente dell'operatore.
-    Stringa vuota se il viewport non è disponibile."""
-    if not viewport:
+def viewport_hint(viewport: dict | None) -> str:
+    if not viewport or not isinstance(viewport, dict):
         return ""
-    return ("\n\nOPERATOR MAP VIEW: center lat={lat} lon={lon}; "
-            "bounds N={north} S={south} E={east} W={west}. "
-            "Use this center for 'here'/'this area'.").format(**viewport)
+    try:
+        lat = viewport.get("lat")
+        lon = viewport.get("lon")
+        if lat is None or lon is None:
+            center = viewport.get("center")
+            if isinstance(center, (list, tuple)) and len(center) == 2:
+                lat, lon = center[0], center[1]
+        
+        north = viewport.get("north")
+        south = viewport.get("south")
+        east = viewport.get("east")
+        west = viewport.get("west")
+        if any(v is None for v in (north, south, east, west)):
+            bounds = viewport.get("bounds")
+            if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+                south, west = bounds[0][0], bounds[0][1]
+                north, east = bounds[1][0], bounds[1][1]
+
+        if lat is not None and lon is not None:
+            hint = f"\n\nOPERATOR MAP VIEW: center lat={lat} lon={lon};"
+            if all(v is not None for v in (north, south, east, west)):
+                hint += f" bounds N={north} S={south} E={east} W={west}."
+            hint += " Use this center for 'here'/'this area'."
+            return hint
+    except Exception:
+        pass
+    return ""

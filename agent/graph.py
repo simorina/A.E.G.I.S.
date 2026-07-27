@@ -6,7 +6,7 @@ from langgraph.types import interrupt
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 
 from .prompts import AGENT_SYSTEM_PROMPT, viewport_hint
-from .geojson import merge_geojson, geojson_reducer
+from .geojson import merge_geojson, geojson_reducer, RESET_GEOJSON
 
 CLARIFY_TOOL_NAME = "request_clarification"
 
@@ -25,7 +25,14 @@ def build_graph(*, llm, tools, ground_fn, checkpointer):
         bound = llm.bind_tools(tools)
         system = AGENT_SYSTEM_PROMPT + viewport_hint(state.get("viewport"))
         ai = bound.invoke([SystemMessage(content=system)] + state["messages"])
-        return {"messages": [ai]}
+        out = {"messages": [ai]}
+        # Al primo turno di un thread nuovo il canale `geojson` non ha un valore
+        # precedente: LangGraph scrive il sentinella senza invocare il reducer.
+        # `agent` e' il primo nodo a eseguire: qui lo azzeriamo, cosi' non puo'
+        # uscire dal grafo (il client farebbe JSON.parse sul sentinella).
+        if state.get("geojson") == RESET_GEOJSON:
+            out["geojson"] = RESET_GEOJSON   # passa dal reducer -> None
+        return out
 
     def tools_node(state: AgentState):
         last = state["messages"][-1]

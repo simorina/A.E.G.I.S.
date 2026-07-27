@@ -28,10 +28,21 @@ def db():
     """Engine reale se il DB è raggiungibile, altrimenti skip dei test CRUD."""
     import agent
     from agent.conversations import ensure_schema
+    from sqlalchemy import text
     if agent.engine is None:
         pytest.skip("DB non raggiungibile: test CRUD saltati")
     ensure_schema(agent.engine, agent.config.schema)
-    return agent.engine, agent.config.schema
+    with agent.engine.begin() as conn:
+        for op in ["TEST_OP", "TEST_BULK_OP", "TEST_OTHER_OP"]:
+            conn.execute(text(f"""
+                INSERT INTO {agent.config.schema}.auth (clearance, username, password)
+                VALUES ('TEST', '{op}', 'testpass')
+                ON CONFLICT (username) DO NOTHING
+            """))
+    yield agent.engine, agent.config.schema
+    with agent.engine.begin() as conn:
+        for op in ["TEST_OP", "TEST_BULK_OP", "TEST_OTHER_OP"]:
+            conn.execute(text(f"DELETE FROM {agent.config.schema}.auth WHERE username = '{op}'"))
 
 
 def test_delete_all_removes_only_that_operator(db):

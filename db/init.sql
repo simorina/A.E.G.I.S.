@@ -16,23 +16,27 @@ SET search_path TO schema1, public;
 -- ---------------------------------------------------------------------
 -- AUTH  (used by /api/login -> SELECT * ... ; result[0] is the clearance)
 -- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS schema1.auth;
+-- ---------------------------------------------------------------------
+-- AUTH  (used by /api/login -> SELECT * ... ; result[0] is the clearance)
+-- Password stored as bcrypt hashes
+-- ---------------------------------------------------------------------
+DROP TABLE IF EXISTS schema1.auth CASCADE;
 CREATE TABLE schema1.auth (
     clearance  VARCHAR(32)  NOT NULL,   -- result[0] -> "ACCESS GRANTED // LEVEL <clearance>"
     username   VARCHAR(64)  NOT NULL,   -- maps to operator_id
-    password   VARCHAR(128) NOT NULL,   -- maps to access_key
+    password   VARCHAR(128) NOT NULL,   -- bcrypt hashed password
     PRIMARY KEY (username)
 );
 
 INSERT INTO schema1.auth (clearance, username, password) VALUES
-    ('OMEGA-9', 'CMD_USR_0001', 'tango-down'),
-    ('ALPHA-3', 'CMD_USR_0042', 'falcon99'),
-    ('SIGMA-7', 'OP_ADMIN',     'aegis2026');
+    ('OMEGA-9', 'CMD_USR_0001', '$2b$10$K1jOM2ysgY/YNm9l.iCMSePrAH3nrkmr6obb0Y.NFN40jUL9JzHKi'),
+    ('ALPHA-3', 'CMD_USR_0042', '$2b$10$T8p2ohPCA2rInOFwKSBXDOqow6S3Ax7.n1rj4Njr2yfWRzjmANQD2'),
+    ('SIGMA-7', 'OP_ADMIN',     '$2b$10$w.VuZQ2s7jUgPxxnCEV4dOqQfMf5eKtqj/4NioYSGjHwrWuM91Hy6');
 
 -- ---------------------------------------------------------------------
 -- PARKS  (has a real geom column -> read by gpd.read_postgis geom_col='geom')
 -- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS schema1.parks;
+DROP TABLE IF EXISTS schema1.parks CASCADE;
 CREATE TABLE schema1.parks (
     id        SERIAL PRIMARY KEY,
     name      VARCHAR(120) NOT NULL,
@@ -52,15 +56,16 @@ INSERT INTO schema1.parks (name, area_sqm, geom) VALUES
 CREATE INDEX parks_geom_gix ON schema1.parks USING GIST (geom);
 
 -- ---------------------------------------------------------------------
--- FERMATE_METRO  (NO geom; geometry built at query time from lon/lat)
+-- FERMATE_METRO  (with native PostGIS geom Point column and GiST index)
 -- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS schema1.fermate_metro;
+DROP TABLE IF EXISTS schema1.fermate_metro CASCADE;
 CREATE TABLE schema1.fermate_metro (
     id         SERIAL PRIMARY KEY,
     name       VARCHAR(120) NOT NULL,
     line       VARCHAR(8)   NOT NULL,   -- e.g. M1, M2, M3, M4, M5
     longitude  DOUBLE PRECISION NOT NULL,
-    latitude   DOUBLE PRECISION NOT NULL
+    latitude   DOUBLE PRECISION NOT NULL,
+    geom       geometry(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)) STORED
 );
 
 INSERT INTO schema1.fermate_metro (name, line, longitude, latitude) VALUES
@@ -90,16 +95,19 @@ INSERT INTO schema1.fermate_metro (name, line, longitude, latitude) VALUES
     ('Zara',                   'M5', 9.1960, 45.4920),
     ('San Siro Stadio',        'M5', 9.1240, 45.4780);
 
+CREATE INDEX fermate_metro_geom_gix ON schema1.fermate_metro USING GIST (geom);
+
 -- ---------------------------------------------------------------------
--- HOSPITALS  (NO geom; another lon/lat table for infrastructure queries)
+-- HOSPITALS  (with native PostGIS geom Point column and GiST index)
 -- ---------------------------------------------------------------------
-DROP TABLE IF EXISTS schema1.hospitals;
+DROP TABLE IF EXISTS schema1.hospitals CASCADE;
 CREATE TABLE schema1.hospitals (
     id         SERIAL PRIMARY KEY,
     name       VARCHAR(150) NOT NULL,
     type       VARCHAR(60),
     longitude  DOUBLE PRECISION NOT NULL,
-    latitude   DOUBLE PRECISION NOT NULL
+    latitude   DOUBLE PRECISION NOT NULL,
+    geom       geometry(Point, 4326) GENERATED ALWAYS AS (ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)) STORED
 );
 
 INSERT INTO schema1.hospitals (name, type, longitude, latitude) VALUES
@@ -110,12 +118,14 @@ INSERT INTO schema1.hospitals (name, type, longitude, latitude) VALUES
     ('Ospedale San Carlo Borromeo',       'General',     9.1080, 45.4560),
     ('Istituto Nazionale dei Tumori',     'Oncology',    9.2300, 45.4750);
 
+CREATE INDEX hospitals_geom_gix ON schema1.hospitals USING GIST (geom);
+
 -- ---------------------------------------------------------------------
 -- CONVERSATIONS / MESSAGES  (chat salvate per operatore)
 -- ---------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schema1.conversations (
     id          UUID PRIMARY KEY,
-    operator_id VARCHAR(64)  NOT NULL,
+    operator_id VARCHAR(64)  NOT NULL REFERENCES schema1.auth(username) ON DELETE CASCADE,
     title       VARCHAR(120) NOT NULL,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
     updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now()

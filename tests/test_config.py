@@ -46,5 +46,5 @@ def test_tool_calling_can_be_disabled():
     assert load_config(env).tool_calling is False
 
 def test_recursion_limit_default_and_override():
-    assert load_config(BASE_ENV).recursion_limit == 12
+    assert load_config(BASE_ENV).recursion_limit == 25
     assert load_config({**BASE_ENV, "RECURSION_LIMIT": "5"}).recursion_limit == 5

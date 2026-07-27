@@ -112,8 +112,12 @@ def test_make_graph_tools_names_and_dict_return():
         execute_sql=lambda sql: FakeGDF(),
         schema="schema1",
     )}
-    assert set(tools) == {"query_intel", "draw_geometry", "spatial_analysis",
-                          "locate_place", "buffer_around", "trace_streets"}
+    assert set(tools) == {
+        "query_intel", "draw_geometry", "spatial_analysis",
+        "locate_place", "buffer_around", "trace_streets",
+        "spatial_code_interpreter", "analyze_multispectral_band",
+        "get_tactical_weather", "calculate_elevation_profile"
+    }
     out = tools["spatial_analysis"].invoke({"request": "nearest"})
     assert out["geojson"] is not None
     assert "Duomo" in out["summary"]

@@ -24,7 +24,7 @@ def ensure_schema(engine, schema: str) -> None:
     ddl = [
         f"""CREATE TABLE IF NOT EXISTS {schema}.conversations (
                 id          UUID PRIMARY KEY,
-                operator_id VARCHAR(64)  NOT NULL,
+                operator_id VARCHAR(64)  NOT NULL REFERENCES {schema}.auth(username) ON DELETE CASCADE,
                 title       VARCHAR(120) NOT NULL,
                 created_at  TIMESTAMPTZ  NOT NULL DEFAULT now(),
                 updated_at  TIMESTAMPTZ  NOT NULL DEFAULT now())""",
@@ -59,6 +59,7 @@ def _row_to_conversation(row) -> dict:
 def create_conversation(engine, schema: str, operator_id: str, title: str = DEFAULT_TITLE) -> dict:
     new_id = str(uuid.uuid4())
     with engine.begin() as conn:
+        conn.execute(text("SET default_transaction_read_only = off"))
         row = conn.execute(text(
             f"""INSERT INTO {schema}.conversations (id, operator_id, title)
                 VALUES (:id, :operator_id, :title)
@@ -101,6 +102,7 @@ def get_messages(engine, schema: str, conversation_id: str) -> list:
 def append_message(engine, schema: str, conversation_id: str, role: str,
                    content: str, geojson=None) -> None:
     with engine.begin() as conn:
+        conn.execute(text("SET default_transaction_read_only = off"))
         conn.execute(text(
             f"""INSERT INTO {schema}.messages (conversation_id, role, content, geojson)
                 VALUES (:cid, :role, :content, :geojson)"""),
@@ -112,6 +114,7 @@ def append_message(engine, schema: str, conversation_id: str, role: str,
 
 def rename_conversation(engine, schema: str, conversation_id: str, title: str) -> bool:
     with engine.begin() as conn:
+        conn.execute(text("SET default_transaction_read_only = off"))
         result = conn.execute(text(
             f"UPDATE {schema}.conversations SET title = :title, updated_at = now() WHERE id = :cid"),
             {"title": title, "cid": conversation_id})
@@ -122,6 +125,7 @@ def delete_all_conversations(engine, schema: str, operator_id: str) -> int:
     """Elimina TUTTE le conversazioni di un operatore (messaggi in cascade).
     Ritorna quante ne sono state eliminate."""
     with engine.begin() as conn:
+        conn.execute(text("SET default_transaction_read_only = off"))
         result = conn.execute(text(
             f"DELETE FROM {schema}.conversations WHERE operator_id = :operator_id"),
             {"operator_id": operator_id})
@@ -130,6 +134,7 @@ def delete_all_conversations(engine, schema: str, operator_id: str) -> int:
 
 def delete_conversation(engine, schema: str, conversation_id: str) -> bool:
     with engine.begin() as conn:
+        conn.execute(text("SET default_transaction_read_only = off"))
         result = conn.execute(text(
             f"DELETE FROM {schema}.conversations WHERE id = :cid"), {"cid": conversation_id})
     return result.rowcount > 0

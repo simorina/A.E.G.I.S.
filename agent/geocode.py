@@ -20,11 +20,52 @@ def _default_http_get(url, params, headers, timeout):
     return resp.json()
 
 
+def extract_viewport_bounds(viewport: Optional[dict]) -> Optional[tuple[float, float, float, float]]:
+    """Estrarre (south, west, north, east) da qualsiasi formato viewport dict."""
+    if not isinstance(viewport, dict):
+        return None
+
+    north = viewport.get("north")
+    south = viewport.get("south")
+    east = viewport.get("east")
+    west = viewport.get("west")
+
+    if any(v is None for v in (north, south, east, west)):
+        bounds = viewport.get("bounds")
+        if isinstance(bounds, (list, tuple)) and len(bounds) == 2:
+            try:
+                south, west = float(bounds[0][0]), float(bounds[0][1])
+                north, east = float(bounds[1][0]), float(bounds[1][1])
+            except (ValueError, TypeError, IndexError):
+                pass
+
+    if any(v is None for v in (north, south, east, west)):
+        lat = viewport.get("lat")
+        lon = viewport.get("lon")
+        if lat is None or lon is None:
+            center = viewport.get("center")
+            if isinstance(center, (list, tuple)) and len(center) == 2:
+                try:
+                    lat, lon = float(center[0]), float(center[1])
+                except (ValueError, TypeError):
+                    pass
+        if lat is not None and lon is not None:
+            delta = 0.05
+            south, west = lat - delta, lon - delta
+            north, east = lat + delta, lon + delta
+
+    if all(v is not None for v in (north, south, east, west)):
+        return (float(south), float(west), float(north), float(east))
+    return None
+
+
 def viewbox_from_viewport(viewport: Optional[dict]):
     """Converte il viewport nel viewbox Nominatim (west, north, east, south)."""
-    if not viewport:
+    b = extract_viewport_bounds(viewport)
+    if not b:
         return None
-    return (viewport["west"], viewport["north"], viewport["east"], viewport["south"])
+    south, west, north, east = b
+    return (west, north, east, south)
 
 
 def geocode(query: str, viewbox=None, *, http_get=None) -> Optional[dict]:

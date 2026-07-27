@@ -31,13 +31,20 @@ def readonly_preamble(statement_timeout_ms: int) -> List[str]:
 def execute_readonly(engine, sql: str, statement_timeout_ms: int, geom_col: str = "geom"):
     """Esegue una SELECT in una connessione forzata read-only e ritorna un GeoDataFrame."""
     with engine.connect() as conn:
-        for stmt in readonly_preamble(statement_timeout_ms):
-            conn.execute(text(stmt))
-        # I SET sono session-scoped ma `default_transaction_read_only` vale solo per le
-        # transazioni che INIZIANO dopo. SQLAlchemy ha gia' aperto la tx (autobegin) al
-        # primo execute: la chiudiamo col commit cosi' la SELECT seguente eredita il
-        # read-only. Senza questo commit lo Strato 2 non rifiuta le scritture.
-        conn.commit()
-        gdf = gpd.read_postgis(text(sql), con=conn, geom_col=geom_col)
-    log.info("execute_readonly: %d rows", len(gdf))
-    return gdf
+        try:
+            for stmt in readonly_preamble(statement_timeout_ms):
+                conn.execute(text(stmt))
+            # I SET sono session-scoped ma `default_transaction_read_only` vale solo per le
+            # transazioni che INIZIANO dopo. SQLAlchemy ha gia' aperto la tx (autobegin) al
+            # primo execute: la chiudiamo col commit cosi' la SELECT seguente eredita il
+            # read-only. Senza questo commit lo Strato 2 non rifiuta le scritture.
+            conn.commit()
+            gdf = gpd.read_postgis(text(sql), con=conn, geom_col=geom_col)
+            log.info("execute_readonly: %d rows", len(gdf))
+            return gdf
+        finally:
+            try:
+                conn.execute(text("RESET default_transaction_read_only; RESET statement_timeout;"))
+                conn.commit()
+            except Exception:
+                pass

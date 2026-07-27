@@ -63,11 +63,12 @@ def _ways_by_name(data):
     return byname
 
 
+from agent.geocode import extract_viewport_bounds
+
+
 def bbox_from_viewport(viewport):
     """Bbox Overpass (south, west, north, east) dal viewport, o None."""
-    if not viewport:
-        return None
-    return (viewport["south"], viewport["west"], viewport["north"], viewport["east"])
+    return extract_viewport_bounds(viewport)
 
 
 def _street_names_in_bbox(bbox, post, _sleep):

@@ -1,0 +1,18 @@
+fastapi
+uvicorn
+geopandas
+sqlalchemy
+psycopg2-binary
+langchain
+langchain-core
+langchain-community
+langchain-ollama
+contextily
+pillow
+python-dotenv
+pytest
+langgraph
+# pin obbligatorio: le versioni >=3 tirano langgraph-checkpoint 4.x, incompatibile
+# con langchain-core 0.3.63 (rompe anche MemorySaver).
+langgraph-checkpoint-postgres==2.0.25
+psycopg[binary,pool]

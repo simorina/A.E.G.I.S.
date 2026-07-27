@@ -1,4 +1,5 @@
 """A.E.G.I.S. agent package: NL->PostGIS tool-calling con guardrail e memoria."""
+import asyncio
 import logging
 
 from dotenv import load_dotenv
@@ -7,6 +8,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 from langchain_core.messages import HumanMessage
+
 
 from .config import load_config
 from .conversations import ensure_schema
@@ -123,16 +125,27 @@ def build_checkpointer(db_uri):
     """Checkpointer persistente su Postgres; fallback a MemorySaver se non disponibile.
 
     Usa un ConnectionPool invece di una singola connessione tenuta aperta per la
-    vita del processo: quest'ultima, se cade (riavvio di Postgres, timeout, rete),
-    resta chiusa per sempre e ogni turno fallisce con "the connection is closed"
-    finche' non si riavvia l'app. Il pool riapre le connessioni da solo e
-    `check=ConnectionPool.check_connection` scarta quelle morte prima dell'uso.
+    vita del processo. Utilizza DualPostgresSaver per garantire compatibilità
+    sia con invoke() sincrono che con astream_events() asincrono per SSE.
     """
     if db_uri:
         try:
             from langgraph.checkpoint.postgres import PostgresSaver
             from psycopg.rows import dict_row
             from psycopg_pool import ConnectionPool
+
+            class DualPostgresSaver(PostgresSaver):
+                async def aget_tuple(self, config):
+                    return await asyncio.to_thread(self.get_tuple, config)
+
+                async def aput(self, config, checkpoint, metadata, new_versions):
+                    return await asyncio.to_thread(self.put, config, checkpoint, metadata, new_versions)
+
+                async def aput_writes(self, config, writes, task_id, task_path=None):
+                    return await asyncio.to_thread(self.put_writes, config, writes, task_id, task_path)
+
+                async def alist(self, config, *, filter=None, before=None, limit=None):
+                    return await asyncio.to_thread(self.list, config, filter=filter, before=before, limit=limit)
 
             pool = ConnectionPool(
                 conninfo=db_uri,
@@ -142,12 +155,13 @@ def build_checkpointer(db_uri):
                 check=ConnectionPool.check_connection,   # scarta le connessioni morte
                 kwargs={"autocommit": True, "row_factory": dict_row},
             )
-            saver = PostgresSaver(pool)
+            saver = DualPostgresSaver(pool)
             saver.setup()
             return saver, "postgres"
         except Exception as exc:  # noqa: BLE001 - dipendenza assente o DB irraggiungibile
             log.warning("Postgres checkpointer non disponibile (%s); uso MemorySaver", exc)
     return MemorySaver(), "memory"
+
 
 
 _checkpointer, _checkpointer_kind = build_checkpointer(config.db_uri if engine is not None else None)
@@ -168,6 +182,40 @@ _orchestrator = Orchestrator(
 )
 
 
+from .topology import repair_geojson
+from .opsec import redact_text
+from .evaluator import evaluate_briefing_consistency
+
+
+def get_state_history(thread_id: str):
+    """Retrieve checkpoint history for Time-Travel / State Rewind."""
+    cfg = {"configurable": {"thread_id": thread_id}}
+    history = []
+    try:
+        for state in _graph.get_state_history(cfg):
+            history.append({
+                "checkpoint_id": state.config.get("configurable", {}).get("checkpoint_id"),
+                "next": state.next,
+                "values_keys": list(state.values.keys()) if state.values else []
+            })
+    except Exception as exc:
+        log.warning("get_state_history failed: %s", exc)
+    return history
+
+
+def rewind_checkpoint(thread_id: str, checkpoint_id: str):
+    """Rewind graph state to a specific checkpoint_id (Time-Travel)."""
+    cfg = {"configurable": {"thread_id": thread_id, "checkpoint_id": checkpoint_id}}
+    try:
+        target_state = _graph.get_state(cfg)
+        if target_state and target_state.values:
+            _graph.update_state({"configurable": {"thread_id": thread_id}}, target_state.values)
+            return True
+    except Exception as exc:
+        log.warning("rewind_checkpoint failed: %s", exc)
+    return False
+
+
 def run(message, session_id, image=None, mime_type="image/jpeg", resume=None,
         viewport=None, conversation_id=None):
     # Nessuna guardia offline a livello di run(): i tool geo/vision funzionano senza DB;
@@ -180,7 +228,7 @@ def run(message, session_id, image=None, mime_type="image/jpeg", resume=None,
 
     if image is not None:
         text = _analyze_image(image, message or "", mime_type)
-        return {"text": text, "geojson": None, "awaiting_input": False}
+        return {"text": redact_text(text), "geojson": None, "awaiting_input": False}
 
     thread_id = conversation_id or session_id
     cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": config.recursion_limit}
@@ -200,10 +248,130 @@ def run(message, session_id, image=None, mime_type="image/jpeg", resume=None,
 
     if result.get("__interrupt__"):
         question = result["__interrupt__"][0].value.get("question", "Chiarimento richiesto.")
-        return {"text": question, "geojson": None, "awaiting_input": True}
+        return {"text": redact_text(question), "geojson": None, "awaiting_input": True}
 
-    final = result["messages"][-1].content
-    return {"text": final, "geojson": result.get("geojson"), "awaiting_input": False}
+    final_text = redact_text(result["messages"][-1].content)
+    raw_geojson = result.get("geojson")
+    if raw_geojson == RESET_GEOJSON:
+        raw_geojson = None
+
+    # Section 4 Guardrails: Topology Repair & Evaluator Metrics
+    repaired_geojson = repair_geojson(raw_geojson)
+    eval_metrics = evaluate_briefing_consistency(final_text, repaired_geojson)
+
+    return {
+        "text": final_text,
+        "geojson": repaired_geojson,
+        "awaiting_input": False,
+        "evaluation": eval_metrics
+    }
 
 
-__all__ = ["engine", "vision_llm", "config", "run", "analyze_satellite_image"]
+async def run_stream(message, session_id, image=None, mime_type="image/jpeg", resume=None,
+                     viewport=None, conversation_id=None):
+    """Generatore asincrono di eventi per SSE: trasmette status, token del briefing e risultato finale."""
+    if not config.tool_calling:
+        out = await asyncio.to_thread(_orchestrator.run, message, session_id, image, mime_type)
+        yield {"type": "status", "content": "Riconoscimento tattico via orchestratore..."}
+        yield {"type": "token", "content": out.get("text", "")}
+        yield {"type": "final", **out, "awaiting_input": False}
+        return
+
+    if image is not None:
+        yield {"type": "status", "content": "Analisi ottica satellitare in corso..."}
+        text = await asyncio.to_thread(_analyze_image, image, message or "", mime_type)
+        redacted = redact_text(text)
+        yield {"type": "token", "content": redacted}
+        yield {"type": "final", "text": redacted, "geojson": None, "awaiting_input": False}
+        return
+
+    thread_id = conversation_id or session_id
+    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": config.recursion_limit}
+
+    if resume is not None:
+        inp = Command(resume=resume)
+    else:
+        inp = {"messages": [HumanMessage(content=message)], "session_id": thread_id,
+               "geojson": RESET_GEOJSON, "viewport": viewport}
+
+    token = current_viewport.set(viewport)
+    try:
+        stream_success = False
+        try:
+            yield {"type": "status", "content": "Analisi requisiti tattici & selezione strumenti..."}
+            async for event in _graph.astream_events(inp, cfg, version="v2"):
+                kind = event.get("event")
+                if kind == "on_tool_start":
+                    tool_name = event.get("name")
+                    yield {"type": "status", "content": f"Esecuzione tool tattico: {tool_name}..."}
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name")
+                    yield {"type": "status", "content": f"Tool {tool_name} completato."}
+                elif kind == "on_chat_model_start":
+                    yield {"type": "status", "content": "Elaborazione tattica briefing..."}
+                elif kind == "on_chat_model_stream":
+                    chunk = event.get("data", {}).get("chunk")
+                    if chunk and getattr(chunk, "content", None):
+                        yield {"type": "token", "content": chunk.content}
+            stream_success = True
+        except Exception as exc:
+            log.warning("astream_events error: %s - Esecuzione via threadpool fallback", exc, exc_info=True)
+            yield {"type": "status", "content": "Generazione briefing in corso..."}
+            await asyncio.to_thread(_graph.invoke, inp, cfg)
+
+    finally:
+        current_viewport.reset(token)
+
+    state = _graph.get_state(cfg)
+
+    interrupt_question = None
+    if state:
+        if getattr(state, "tasks", None):
+            for task in state.tasks:
+                interrupts = getattr(task, "interrupts", None)
+                if interrupts:
+                    for intr in interrupts:
+                        val = getattr(intr, "value", None)
+                        if isinstance(val, dict) and "question" in val:
+                            interrupt_question = val["question"]
+                            break
+                        elif isinstance(val, str):
+                            interrupt_question = val
+                            break
+                if interrupt_question:
+                    break
+        if not interrupt_question and isinstance(state.values, dict) and state.values.get("__interrupt__"):
+            question = state.values["__interrupt__"][0].value.get("question", "Chiarimento richiesto.")
+            interrupt_question = question
+
+    if interrupt_question:
+        yield {"type": "final", "text": redact_text(interrupt_question), "geojson": None, "awaiting_input": True}
+        return
+
+    if state.values and state.values.get("messages"):
+        final_msg = state.values["messages"][-1]
+        final_text = redact_text(final_msg.content)
+        raw_geojson = state.values.get("geojson")
+        if raw_geojson == RESET_GEOJSON:
+            raw_geojson = None
+
+        repaired_geojson = repair_geojson(raw_geojson)
+        eval_metrics = evaluate_briefing_consistency(final_text, repaired_geojson)
+
+        yield {
+            "type": "final",
+            "text": final_text,
+            "geojson": repaired_geojson,
+            "awaiting_input": False,
+            "evaluation": eval_metrics
+        }
+    else:
+        yield {"type": "final", "text": "Nessun dato tattico disponibile.", "geojson": None, "awaiting_input": False}
+
+
+__all__ = [
+    "engine", "vision_llm", "config", "run", "run_stream", "analyze_satellite_image",
+    "get_state_history", "rewind_checkpoint", "repair_geojson", "redact_text",
+    "evaluate_briefing_consistency"
+]
+
